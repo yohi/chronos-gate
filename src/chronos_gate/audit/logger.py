@@ -16,6 +16,9 @@ from typing import Any, Literal
 _SENSITIVE_KEYS_FULL = {"api_key", "token", "secret", "authorization", "password"}
 _SENSITIVE_KEYS_PREFIX = ("ck_",)
 
+# 既知の非機密キー: 値の正規表現マスクをスキップする
+_SAFE_KEYS = {"sid", "session_id"}
+
 # 値に含まれるシークレットを検知する正規表現
 # Bearer トークン、APIキー(sk-, ck-, ghp_等)、32文字以上の16進数(nonce/hash等)
 _SENSITIVE_VALUE_RE = re.compile(
@@ -82,6 +85,9 @@ class AuditLogger:
         if isinstance(value, str):
             if key_name and key_name.lower() in {"stacktrace", "traceback"}:
                 return _SENSITIVE_VALUE_RE.sub("**********", value)
+            # 既知の非機密キーは値の内容によるマスクをスキップ
+            if key_name and key_name.lower() in _SAFE_KEYS:
+                return value
             # 値の内容によるチェック
             if _SENSITIVE_VALUE_RE.search(value):
                 return "**********"

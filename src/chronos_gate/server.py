@@ -627,7 +627,7 @@ def build_router(
             # Authorization check: Does this agent have the approver role?
             # If approvers list is empty, we might want to allow all for migration,
             # but usually it should be explicit. Let's assume explicit for security.
-            if policy.approvers and resolver_agent_id not in policy.approvers:
+            if not policy.approvers or resolver_agent_id not in policy.approvers:
                 audit.log(
                     ev="approval_decision",
                     outcome="forbidden_role",
