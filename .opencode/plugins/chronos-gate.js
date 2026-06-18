@@ -5,20 +5,6 @@ const os = require('node:os');
 
 const gatewayPort = process.env.MCP_GATEWAY_PORT || '9100';
 
-function sanitizeToolCall(toolCall) {
-  if (!toolCall) return null;
-  const sanitized = { ...toolCall };
-  if (sanitized.tool_input) {
-    sanitized.tool_input = { ...sanitized.tool_input };
-    const sensitiveKeys = ['api_key', 'token', 'password', 'secret', 'key', 'credential', 'command'];
-    for (const k of Object.keys(sanitized.tool_input)) {
-      if (sensitiveKeys.some(s => k.toLowerCase().includes(s))) {
-        sanitized.tool_input[k] = '[REDACTED]';
-      }
-    }
-  }
-  return sanitized;
-}
 
 // Debug log helper
 function logDebug(msg) {
