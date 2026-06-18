@@ -1,0 +1,34 @@
+language: en
+early_access: false
+reviews:
+  profile: chill
+  request_changes_workflow: true
+  high_level_summary: true
+  poem: true
+  review_status: true
+  collapse_walkthrough: false
+  path_filters: []
+  path_instructions:
+    - path: "src/**/*.py"
+      instructions: |
+        Review Python code for type safety, async/await best practices,
+        Pydantic model validation, and FastAPI patterns.
+    - path: "tests/**/*.py"
+      instructions: |
+        Ensure tests are comprehensive, use pytest fixtures appropriately,
+        and cover both success and error cases.
+    - path: "**/*.yml"
+      instructions: |
+        Check GitHub Actions workflow files for security best practices
+        and efficient caching strategies.
+  auto_review:
+    enabled: true
+    ignore_title_keywords:
+      - "WIP"
+      - "DO NOT MERGE"
+    drafts: false
+    base_branches:
+      - master
+  auto_reply: true
+chat:
+  auto_reply: true
