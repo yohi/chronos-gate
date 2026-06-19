@@ -99,8 +99,8 @@ function getChronosSearchDirs(directory = null) {
   if (process.env.PWD) searchDirs.push(process.env.PWD);
 
   searchDirs.push(
-    path.join(process.env.HOME, 'program', 'chronos-graph'),
-    path.join(process.env.HOME, 'chronos-graph')
+    path.join(os.homedir() || process.env.HOME || '', 'program', 'chronos-graph'),
+    path.join(os.homedir() || process.env.HOME || '', 'chronos-graph')
   );
 
   const uniqueDirs = [];
@@ -233,7 +233,7 @@ function checkAndStartGateway() {
     logDebug(`Gateway is offline. Attempting auto-start: ${err.message}`);
     showToast("Gateway is offline. Auto-starting...", "warning");
     try {
-      const errLogPath = path.join(process.env.HOME, '.config', 'opencode', 'gateway-spawn-error.log');
+      const errLogPath = path.join(os.homedir() || process.env.HOME || '', '.config', 'opencode', 'gateway-spawn-error.log');
       const errLog = fs.openSync(errLogPath, 'a');
 
       const validSearchDirs = getChronosSearchDirs();
@@ -265,7 +265,7 @@ function checkAndStartGateway() {
       let gatewayCmd = 'uvx';
       let gatewayArgs = [
         "--quiet",
-        "--from", "git+https://github.com/yohi/chronos-gate.git",
+        "--from", "git+https://github.com/yohi/chronos-gate.git@5b11fd81ec1dc76897dbd74dec648005b85462ca",
         "chronos-gate", "run"
       ];
 
@@ -274,12 +274,12 @@ function checkAndStartGateway() {
         gatewayArgs = ["run"];
         logDebug(`Using local venv gateway: ${gatewayCmd}`);
       } else {
-        const localBinUvx = path.join(process.env.HOME, '.local', 'bin', 'uvx');
+        const localBinUvx = path.join(os.homedir() || process.env.HOME || '', '.local', 'bin', 'uvx');
         gatewayCmd = fs.existsSync(localBinUvx) ? localBinUvx : 'uvx';
         logDebug(`Using uvx fallback gateway: ${gatewayCmd}`);
       }
 
-      const localBinDir = path.join(process.env.HOME, '.local', 'bin');
+      const localBinDir = path.join(os.homedir() || process.env.HOME || '', '.local', 'bin');
       const currentPath = process.env.PATH || '';
       const newPath = currentPath.includes(localBinDir) ? currentPath : `${localBinDir}:${currentPath}`;
 
