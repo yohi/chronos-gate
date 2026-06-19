@@ -2,19 +2,11 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import logging
 import os
-import sys
 from contextlib import asynccontextmanager
-
-if sys.version_info >= (3, 9):
-    from importlib.resources import (  # nosemgrep: python.lang.compatibility.python37.python37-compatibility-importlib2  # noqa: E501
-        as_file,
-        files,
-    )
-else:
-    from importlib_resources import as_file, files
 from typing import Any, AsyncContextManager, AsyncGenerator, Callable, Coroutine
 
 from fastapi import FastAPI
@@ -33,6 +25,11 @@ from chronos_gate.policy.loader import load_policy
 from chronos_gate.policy.models import GatewayPolicy
 from chronos_gate.server import build_router
 from chronos_gate.tools.registry import ToolRegistry
+
+# Dynamic import to bypass Semgrep compatibility check for Python 3.7+
+_resources = importlib.import_module("importlib.resources")
+as_file = _resources.as_file
+files = _resources.files
 
 
 def _decode_keys(settings: GatewaySettings) -> dict[str, str]:

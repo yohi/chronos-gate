@@ -602,8 +602,9 @@ async def _execute_tool_call(
             agent=record.agent_id,
             sid=sid,
             tool="tool_name",
+            error=str(exc),
         )
-        return _jsonrpc_error(rpc_id, -32602, str(exc))
+        return _jsonrpc_error(rpc_id, -32602, "Policy violation")
     except UpstreamError:
         audit.log(
             ev="call",
@@ -652,7 +653,13 @@ async def _handle_messages(
     try:
         body = await request.json()
     except json.JSONDecodeError as exc:
-        return _jsonrpc_error(None, -32700, f"Parse error: {exc}")
+        audit.log(
+            ev="message",
+            decision="deny",
+            reason="json_decode_failed",
+            error=str(exc),
+        )
+        return _jsonrpc_error(None, -32700, "Parse error: Invalid JSON payload")
 
     if not isinstance(body, dict):
         return _jsonrpc_error(None, -32600, "Invalid Request: body must be an object")
