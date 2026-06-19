@@ -162,3 +162,11 @@ class PendingApprovalRegistry:
                 for aid, entry in self._pending.items()
                 if entry.session_id == session_id and entry.decision is None
             ]
+
+    async def get_requester_agent_id(self, approval_id: str) -> str | None:
+        """Return the requester_agent_id for a pending approval, or None if not found."""
+        async with self._lock:
+            entry = self._pending.get(approval_id)
+            if entry is None:
+                return None
+            return entry.requester_agent_id

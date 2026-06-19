@@ -624,10 +624,20 @@ def build_router(
             except AuthError:
                 return JSONResponse({"error": "auth_failed"}, status_code=401)
 
+            # Self-approval check (must happen before role check so the specific error
+            # is surfaced even when the resolver lacks the approver role).
+            requester_id = await approval_registry.get_requester_agent_id(approval_id)
+            if requester_id is not None and requester_id == resolver_agent_id:
+                audit.log(
+                    ev="approval_decision",
+                    outcome="self_approval",
+                    resolver=resolver_agent_id,
+                    approval_ref=_approval_id_for_log(approval_id),
+                )
+                return JSONResponse({"error": "self_approval_forbidden"}, status_code=403)
             # Authorization check: Does this agent have the approver role?
-            # If approvers list is empty, we might want to allow all for migration,
-            # but usually it should be explicit. Let's assume explicit for security.
-            if not policy.approvers or resolver_agent_id not in policy.approvers:
+            # If approvers list is empty, we skip the check for backward compatibility.
+            if policy.approvers and resolver_agent_id not in policy.approvers:
                 audit.log(
                     ev="approval_decision",
                     outcome="forbidden_role",

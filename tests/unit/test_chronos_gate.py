@@ -2340,7 +2340,8 @@ class TestBlockingModeHandlerDirect:
                     allowed_intents: [curate_memories]
                   operator:
                     allowed_intents: [curate_memories]
-                """
+                approvers: [operator]
+"""
             ).lstrip()
         )
         policy = load_policy(policy_file)
@@ -2512,8 +2513,8 @@ class TestBlockingModeHandlerDirect:
                     output_filter: f
                     guardrails: {memory_delete: {requires_approval: true}}
                 agents:
-                  agent-a: {allowed_intents: [curate_memories]}
                   agent-b: {allowed_intents: [curate_memories]}
+                approvers: [agent-b]
                 """
             ).lstrip()
         )
@@ -2632,8 +2633,10 @@ class TestBlockingModeHandlerDirect:
         assert '"approval_ref":"' in allow_log[0]
 
         import re
-
+        
         full_hex = re.findall(r"[0-9a-f]{32}", err)
+        # session_id (sid) is not masked and is a valid hex string, so exclude it
+        full_hex = [h for h in full_hex if h != rec.session_id]
         assert not full_hex
 
     @pytest.mark.asyncio
@@ -2702,8 +2705,8 @@ class TestApprovalsEndpoint:
                     output_filter: f
                     guardrails: {memory_delete: {requires_approval: true}}
                 agents:
-                  agent-a: {allowed_intents: [curate_memories]}
                   operator: {allowed_intents: [curate_memories]}
+                approvers: [operator]
                 """
             ).lstrip()
         )
