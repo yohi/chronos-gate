@@ -145,6 +145,11 @@ class PolicyEngine:
                     "number": (int, float),
                     "boolean": bool,
                 }
+                if expected_type_str not in types_map:
+                    raise PolicyError(
+                        f"parameter {param_name!r} has unknown type {expected_type_str!r}",
+                        reason=f"param_unknown_type:{param_name}",
+                    )
                 expected_type_cls = types_map[expected_type_str]
                 if not isinstance(val, expected_type_cls):
                     actual_type = "boolean" if isinstance(val, bool) else type(val).__name__
