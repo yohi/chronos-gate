@@ -9,8 +9,7 @@ import sys
 from contextlib import asynccontextmanager
 
 if sys.version_info >= (3, 9):
-    # nosemgrep: python.lang.compatibility.python37.python37-compatibility-importlib2
-    from importlib.resources import as_file, files
+    from importlib.resources import as_file, files  # nosemgrep: python.lang.compatibility.python37.python37-compatibility-importlib2
 else:
     from importlib_resources import as_file, files
 from typing import Any, AsyncContextManager, AsyncGenerator, Callable, Coroutine
