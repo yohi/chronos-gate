@@ -60,7 +60,7 @@ def test_api_account_id_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_cloudflare_account_id_alias(monkeypatch: pytest.MonkeyPatch) -> None:
-    """CHRONOS_EVALUATOR_CLOUDFLARE_ACCOUNT_ID エイリアスで api_account_id が設定されることを検証する。"""
+    """CLOUDFLARE_ACCOUNT_ID エイリアスで api_account_id が設定されることを検証。"""
     monkeypatch.setenv("CHRONOS_EVALUATOR_CLOUDFLARE_ACCOUNT_ID", "cf-account-id")
     settings = EvaluatorSettings(_env_file=None)  # type: ignore[call-arg]
     assert settings.api_account_id is not None

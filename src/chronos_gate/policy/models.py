@@ -95,7 +95,7 @@ class ParamConstraint(BaseModel):
 
         # 4. Limit max_length to MAX_PARAM_LENGTH and enforce ReDoS mitigation cap.
         # We check RE_DOS_MAX_LENGTH first because it is the stricter constraint.
-        # The MAX_PARAM_LENGTH check below is currently unreachable (RE_DOS_MAX_LENGTH < MAX_PARAM_LENGTH)
+        # The MAX_PARAM_LENGTH check below is currently unreachable
         # but retained as a defensive guard in case the constants are reordered.
         if self.max_length is not None:
             if self.max_length > RE_DOS_MAX_LENGTH:
