@@ -16,6 +16,7 @@ coverage:
         base: auto
         branches:
           - master
+          - main
         if_ci_failed: error
         only_pulls: false
         flags:
@@ -30,6 +31,7 @@ coverage:
         base: auto
         branches:
           - master
+          - main
         if_ci_failed: error
         only_pulls: true
         paths:
