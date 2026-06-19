@@ -27,6 +27,7 @@ class TestResolveOutcome:
         assert ResolveOutcome.NOT_FOUND.value == "not_found"
         assert ResolveOutcome.ALREADY_RESOLVED.value == "already_resolved"
         assert ResolveOutcome.FORBIDDEN.value == "forbidden"
+        assert ResolveOutcome.INVALID_STATUS.value == "invalid_status"
 
 
 class TestApprovalDecision:

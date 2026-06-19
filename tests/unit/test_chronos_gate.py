@@ -2513,6 +2513,7 @@ class TestBlockingModeHandlerDirect:
                     output_filter: f
                     guardrails: {memory_delete: {requires_approval: true}}
                 agents:
+                  agent-a: {allowed_intents: [curate_memories]}
                   agent-b: {allowed_intents: [curate_memories]}
                 approvers: [agent-b]
                 """
