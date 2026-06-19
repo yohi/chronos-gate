@@ -265,7 +265,7 @@ function checkAndStartGateway() {
       let gatewayCmd = 'uvx';
       let gatewayArgs = [
         "--quiet",
-        "--from", "git+https://github.com/yohi/chronos-gate.git@5b11fd81ec1dc76897dbd74dec648005b85462ca",
+        "--from", `git+https://github.com/yohi/chronos-gate.git@${process.env.CHRONOS_GATEWAY_GIT_REF || 'master'}`,
         "chronos-gate", "run"
       ];
 
