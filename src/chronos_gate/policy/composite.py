@@ -167,6 +167,12 @@ class CompositeEvaluator:
             if not fut.done():
                 fut.set_exception(exc)
             raise exc
+        except BaseException as exc:
+            # CancelledError / KeyboardInterrupt 等は BaseException のサブクラスで
+            # except Exception で捕捉されないため、fut を解決してから再送出する。
+            if not fut.done():
+                fut.set_exception(exc)
+            raise
         finally:
             self._in_flight_judgments.pop(cache_key, None)
 
