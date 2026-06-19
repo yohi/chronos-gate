@@ -624,27 +624,6 @@ def build_router(
             except AuthError:
                 return JSONResponse({"error": "auth_failed"}, status_code=401)
 
-            # Self-approval check (must happen before role check so the specific error
-            # is surfaced even when the resolver lacks the approver role).
-            requester_id = await approval_registry.get_requester_agent_id(approval_id)
-            if requester_id is not None and requester_id == resolver_agent_id:
-                audit.log(
-                    ev="approval_decision",
-                    outcome="self_approval",
-                    resolver=resolver_agent_id,
-                    approval_ref=_approval_id_for_log(approval_id),
-                )
-                return JSONResponse({"error": "self_approval_forbidden"}, status_code=403)
-            # Authorization check: Does this agent have the approver role?
-            # If approvers list is empty, we skip the check for backward compatibility.
-            if policy.approvers and resolver_agent_id not in policy.approvers:
-                audit.log(
-                    ev="approval_decision",
-                    outcome="forbidden_role",
-                    resolver=resolver_agent_id,
-                    approval_id="unknown",
-                )
-                return JSONResponse({"error": "forbidden"}, status_code=403)
 
             raw_body = bytearray()
             async for chunk in request.stream():
@@ -667,6 +646,28 @@ def build_router(
                 or raw_decision not in {"approve", "reject"}
             ):
                 return JSONResponse({"error": "invalid_request"}, status_code=400)
+
+            # Self-approval check (must happen before role check so the specific error
+            # is surfaced even when the resolver lacks the approver role).
+            requester_id = await approval_registry.get_requester_agent_id(approval_id)
+            if requester_id is not None and requester_id == resolver_agent_id:
+                audit.log(
+                    ev="approval_decision",
+                    outcome="self_approval",
+                    resolver=resolver_agent_id,
+                    approval_ref=_approval_id_for_log(approval_id),
+                )
+                return JSONResponse({"error": "self_approval_forbidden"}, status_code=403)
+            # Authorization check: Does this agent have the approver role?
+            # If approvers list is empty, we skip the check for backward compatibility.
+            if policy.approvers and resolver_agent_id not in policy.approvers:
+                audit.log(
+                    ev="approval_decision",
+                    outcome="forbidden_role",
+                    resolver=resolver_agent_id,
+                    approval_id="unknown",
+                )
+                return JSONResponse({"error": "forbidden"}, status_code=403)
 
             raw_reason = body.get("reason")
             if raw_reason is not None and not isinstance(raw_reason, str):
