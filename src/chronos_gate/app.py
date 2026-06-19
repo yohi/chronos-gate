@@ -9,10 +9,11 @@ import sys
 from contextlib import asynccontextmanager
 
 if sys.version_info >= (3, 9):
-    from importlib.resources import as_file, files  # nosemgrep
+    # nosemgrep: python.lang.compatibility.python37.python37-compatibility-importlib2
+    from importlib.resources import as_file, files
 else:
-    from importlib_resources import as_file, files  # nosemgrep
-from typing import Any, AsyncGenerator
+    from importlib_resources import as_file, files
+from typing import Any, AsyncContextManager, AsyncGenerator, Callable, Coroutine
 
 from fastapi import FastAPI
 from pydantic import ValidationError
@@ -27,6 +28,7 @@ from chronos_gate.config import GatewaySettings
 from chronos_gate.middleware import MaxBodySizeMiddleware
 from chronos_gate.policy.engine import PolicyEngine
 from chronos_gate.policy.loader import load_policy
+from chronos_gate.policy.models import GatewayPolicy
 from chronos_gate.server import build_router
 from chronos_gate.tools.registry import ToolRegistry
 
@@ -53,30 +55,35 @@ def _decode_keys(settings: GatewaySettings) -> dict[str, str]:
     return decoded
 
 
-def build_app(
-    *, upstream_override: Any | None = None, initial_tools: list[dict[str, Any]] | None = None
-) -> FastAPI:
+def _is_missing_policy_path_error(exc: ValidationError) -> bool:
+    return any(
+        error.get("loc") == ("policy_path",) and error.get("type") == "missing"
+        for error in exc.errors()
+    )
+
+
+def _load_sample_policy() -> tuple[GatewaySettings, GatewayPolicy]:
+    resource = files("chronos_gate").joinpath("policies/intents.example.yaml")
+    with as_file(resource) as sample_policy:
+        settings = GatewaySettings(policy_path=sample_policy)
+        return settings, load_policy(settings.policy_path)
+
+
+def _load_settings_and_policy(
+    upstream_override: Any | None,
+) -> tuple[GatewaySettings, GatewayPolicy]:
     try:
         settings = GatewaySettings()
-        policy = load_policy(settings.policy_path)
+        return settings, load_policy(settings.policy_path)
     except ValidationError as exc:
-        missing_policy_path = any(
-            error.get("loc") == ("policy_path",) and error.get("type") == "missing"
-            for error in exc.errors()
-        )
-        if upstream_override is None or not missing_policy_path:
+        if upstream_override is None or not _is_missing_policy_path_error(exc):
             raise
+        return _load_sample_policy()
 
-        resource = files("chronos_gate").joinpath("policies/intents.example.yaml")
-        with as_file(resource) as sample_policy:
-            settings = GatewaySettings(policy_path=sample_policy)
-            policy = load_policy(settings.policy_path)
 
-    audit = AuditLogger(level=settings.audit_log_level)
-    auth = ApiKeyAuthenticator(_decode_keys(settings))
-    engine = PolicyEngine(policy)
-    approval_registry = PendingApprovalRegistry(max_pending=settings.approval_max_pending)
-
+def _build_session_eviction_handler(
+    *, approval_registry: PendingApprovalRegistry, audit: AuditLogger
+) -> Callable[[str, str], Coroutine[Any, Any, None]]:
     async def _on_session_evicted(sid: str, reason: str) -> None:
         try:
             await approval_registry.cancel_session(sid, reason=reason)
@@ -89,42 +96,40 @@ def build_app(
             )
             raise
 
-    sessions = InMemorySessionRegistry(
-        ttl_seconds=settings.session_ttl_seconds,
-        idle_timeout_seconds=settings.session_idle_timeout_seconds,
-        on_session_evicted=_on_session_evicted,
-    )
-    handshake = HandshakeService(
-        authenticator=auth,
-        policy_engine=engine,
-        session_registry=sessions,
-    )
+    return _on_session_evicted
 
+
+def _build_upstream(settings: GatewaySettings, upstream_override: Any | None) -> Any:
     if upstream_override is not None:
-        upstream = upstream_override
-    else:
-        from chronos_gate.upstream.context_store_client import UpstreamClient, build_upstream_env
+        return upstream_override
 
-        upstream = UpstreamClient(
-            command=settings.upstream_command,
-            env=build_upstream_env(
-                passthrough=settings.upstream_env_passthrough,
-                base_env=dict(os.environ),
-            ),
-        )
+    from chronos_gate.upstream.context_store_client import UpstreamClient, build_upstream_env
 
-    if settings.ingestion_mode == "all":
-        hidden_tools: frozenset[str] = frozenset({"memory_save"})
-        logging.getLogger(__name__).warning(
-            "ingestion mode: all - 'memory_save' tool is HIDDEN from agents. "
-            "Client-side hook (e.g. scripts/agent_turn_hook.py via Stop event) "
-            "MUST be configured to send conversation logs at turn end. "
-            "See README.md \u00a7Hybrid Ingestion Mode for client-specific setup."
-        )
-    else:
-        hidden_tools = frozenset()
-    registry = ToolRegistry(initial_tools or [], hidden_tools=hidden_tools)
+    return UpstreamClient(
+        command=settings.upstream_command,
+        env=build_upstream_env(
+            passthrough=settings.upstream_env_passthrough,
+            base_env=dict(os.environ),
+        ),
+    )
 
+
+def _hidden_tools_for_ingestion_mode(settings: GatewaySettings) -> frozenset[str]:
+    if settings.ingestion_mode != "all":
+        return frozenset()
+
+    logging.getLogger(__name__).warning(
+        "ingestion mode: all - 'memory_save' tool is HIDDEN from agents. "
+        "Client-side hook (e.g. scripts/agent_turn_hook.py via Stop event) "
+        "MUST be configured to send conversation logs at turn end. "
+        "See README.md §Hybrid Ingestion Mode for client-specific setup."
+    )
+    return frozenset({"memory_save"})
+
+
+def _build_lifespan(
+    *, upstream: Any, upstream_override: Any | None, registry: ToolRegistry
+) -> Callable[[FastAPI], AsyncContextManager[None]]:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         started = False
@@ -144,11 +149,62 @@ def build_app(
             if upstream_override is None and started and hasattr(upstream, "stop"):
                 await upstream.stop()
 
-    app = FastAPI(title="ChronosGraph MCP Gateway", lifespan=lifespan)
-    app.add_middleware(MaxBodySizeMiddleware, max_size_bytes=settings.max_request_body_size_bytes)
+    return lifespan
+
+
+def _attach_app_state(
+    *,
+    app: FastAPI,
+    registry: ToolRegistry,
+    approval_registry: PendingApprovalRegistry,
+    sessions: InMemorySessionRegistry,
+) -> None:
     app.state.tool_registry = registry
     app.state.approval_registry = approval_registry
     app.state.sessions = sessions
+
+
+def build_app(
+    *, upstream_override: Any | None = None, initial_tools: list[dict[str, Any]] | None = None
+) -> FastAPI:
+    settings, policy = _load_settings_and_policy(upstream_override)
+    audit = AuditLogger(level=settings.audit_log_level)
+    auth = ApiKeyAuthenticator(_decode_keys(settings))
+    engine = PolicyEngine(policy)
+    approval_registry = PendingApprovalRegistry(max_pending=settings.approval_max_pending)
+
+    sessions = InMemorySessionRegistry(
+        ttl_seconds=settings.session_ttl_seconds,
+        idle_timeout_seconds=settings.session_idle_timeout_seconds,
+        on_session_evicted=_build_session_eviction_handler(
+            approval_registry=approval_registry,
+            audit=audit,
+        ),
+    )
+    handshake = HandshakeService(
+        authenticator=auth,
+        policy_engine=engine,
+        session_registry=sessions,
+    )
+
+    upstream = _build_upstream(settings, upstream_override)
+
+    hidden_tools = _hidden_tools_for_ingestion_mode(settings)
+    registry = ToolRegistry(initial_tools or [], hidden_tools=hidden_tools)
+
+    lifespan = _build_lifespan(
+        upstream=upstream,
+        upstream_override=upstream_override,
+        registry=registry,
+    )
+    app = FastAPI(title="ChronosGraph MCP Gateway", lifespan=lifespan)
+    app.add_middleware(MaxBodySizeMiddleware, max_size_bytes=settings.max_request_body_size_bytes)
+    _attach_app_state(
+        app=app,
+        registry=registry,
+        approval_registry=approval_registry,
+        sessions=sessions,
+    )
 
     app.include_router(
         build_router(

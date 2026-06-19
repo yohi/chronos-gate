@@ -13,6 +13,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 logger = logging.getLogger(__name__)
 
+_MASK = "**********"
+
+
 
 def _deep_freeze(v: Any) -> Any:
     """再帰的にオブジェクトを不変な形式に変換します。"""
@@ -69,7 +72,7 @@ def sanitize_for_log(data: Any) -> Any:
             is_sensitive = any(token in normalized_key for token in sensitive_tokens)
 
             if is_sensitive:
-                new_data[str(k)] = "**********"
+                new_data[str(k)] = _MASK
             else:
                 new_data[str(k)] = sanitize_for_log(v)
         return new_data
@@ -86,10 +89,10 @@ def sanitize_for_log(data: Any) -> Any:
     if isinstance(data, str):
         # メールアドレスの簡易パターンマスク
         if "@" in data and "." in data:
-            return "**********"
+            return _MASK
         # SSN (XXX-XX-XXXX) の簡易パターンマスク
         if re.match(r"^\d{3}-\d{2}-\d{4}$", data):
-            return "**********"
+            return _MASK
         # Secret patterns: Bearer, JWT, long hex/base64, credit card
         if (
             re.search(r"Bearer\s+\S+", data, re.I)
@@ -100,7 +103,7 @@ def sanitize_for_log(data: Any) -> Any:
             )  # Long base64-like key
             or re.match(r"^\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}$", data)  # Credit card
         ):
-            return "**********"
+            return _MASK
 
     return data
 

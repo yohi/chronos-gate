@@ -33,6 +33,8 @@ _REASON_MAX = 200
 _ASK_MESSAGE_MAX = 300
 READ_ONLY_TOOLS = frozenset({"memory_search", "memory_search_graph", "memory_stats"})
 
+_CF_PREFIX = "cloudflare/"
+
 
 class LlmUnavailableError(Exception):
     pass
@@ -143,49 +145,72 @@ Any other output will be treated as a parse failure and downgraded to "ask".
 def _parse_decision(text: str) -> Decision:
     stripped = text.strip()
 
-    # Try parsing as JSON first
-    if stripped.startswith("{") and stripped.endswith("}"):
-        try:
-            parsed = cast(object, json.loads(stripped))
-            if isinstance(parsed, dict):
-                obj = cast(Mapping[str, object], parsed)
-                decision = obj.get("decision")
-                if decision == "allow":
-                    return Decision(decision="allow")
-                elif decision == "deny":
-                    reason = obj.get("reason")
-                    if isinstance(reason, str) and reason.strip():
-                        return Decision(decision="deny", reason=reason[:_REASON_MAX])
-                    raise ResponseParseError(
-                        "JSON response missing or invalid 'reason' for 'deny' decision"
-                    )
-                elif decision == "ask":
-                    ask_message = obj.get("ask_message")
-                    if isinstance(ask_message, str) and ask_message.strip():
-                        return Decision(decision="ask", ask_message=ask_message[:_ASK_MESSAGE_MAX])
-                    raise ResponseParseError(
-                        "JSON response missing or invalid 'ask_message' for 'ask' decision"
-                    )
-                else:
-                    raise ResponseParseError(f"JSON response has unknown decision: {decision!r}")
-            else:
-                raise ResponseParseError("JSON response is not a dictionary object")
-        except (json.JSONDecodeError, ValueError) as e:
-            raise ResponseParseError(f"Failed to parse JSON response: {e}") from e
+    if _looks_like_json_object(stripped):
+        return _parse_json_decision(stripped)
 
-    # Fallback to plain text parsing for safety guardrail models like Llama Guard
+    return _parse_plain_text_decision(stripped)
+
+
+def _looks_like_json_object(text: str) -> bool:
+    return text.startswith("{") and text.endswith("}")
+
+
+def _parse_json_decision(text: str) -> Decision:
+    try:
+        parsed = cast(object, json.loads(text))
+    except (json.JSONDecodeError, ValueError) as exc:
+        raise ResponseParseError(f"Failed to parse JSON response: {exc}") from exc
+
+    if not isinstance(parsed, dict):
+        raise ResponseParseError("JSON response is not a dictionary object")
+
+    try:
+        return _decision_from_json_object(cast(Mapping[str, object], parsed))
+    except ValueError as exc:
+        raise ResponseParseError(f"Failed to parse JSON response: {exc}") from exc
+
+
+def _decision_from_json_object(obj: Mapping[str, object]) -> Decision:
+    decision = obj.get("decision")
+    if decision == "allow":
+        return Decision(decision="allow")
+    if decision == "deny":
+        return _deny_decision_from_json(obj)
+    if decision == "ask":
+        return _ask_decision_from_json(obj)
+    raise ResponseParseError(f"JSON response has unknown decision: {decision!r}")
+
+
+def _deny_decision_from_json(obj: Mapping[str, object]) -> Decision:
+    reason = obj.get("reason")
+    if isinstance(reason, str) and reason.strip():
+        return Decision(decision="deny", reason=reason[:_REASON_MAX])
+    raise ResponseParseError("JSON response missing or invalid 'reason' for 'deny' decision")
+
+
+def _ask_decision_from_json(obj: Mapping[str, object]) -> Decision:
+    ask_message = obj.get("ask_message")
+    if isinstance(ask_message, str) and ask_message.strip():
+        return Decision(decision="ask", ask_message=ask_message[:_ASK_MESSAGE_MAX])
+    raise ResponseParseError("JSON response missing or invalid 'ask_message' for 'ask' decision")
+
+
+def _parse_plain_text_decision(stripped: str) -> Decision:
     normalized = stripped.lower()
     if "safe" in normalized and "unsafe" not in normalized:
         return Decision(decision="allow")
     if "unsafe" in normalized:
-        lines = stripped.split("\n")
-        # Extract categories if available (e.g. S1, S2, S3...)
-        reason = "unsafe"
-        if len(lines) > 1:
-            reason = f"unsafe: {', '.join(lines[1:])}"
-        return Decision(decision="deny", reason=reason[:_REASON_MAX])
+        return Decision(decision="deny", reason=_unsafe_reason(stripped))
 
     raise ResponseParseError("non-JSON response and could not parse as safety label")
+
+
+def _unsafe_reason(text: str) -> str:
+    lines = text.split("\n")
+    reason = "unsafe"
+    if len(lines) > 1:
+        reason = f"unsafe: {', '.join(lines[1:])}"
+    return reason[:_REASON_MAX]
 
 
 def _build_user_prompt(
@@ -254,6 +279,8 @@ class LlmEvaluator:
         self._api_key: str = api_key
         # For backward compatibility, normalize 'cloudflare-workers-ai/' prefix to 'cloudflare/'
         if model.startswith("cloudflare-workers-ai/"):
+            model = model.replace("cloudflare-workers-ai/", _CF_PREFIX, 1)
+        if model.startswith("cloudflare-workers-ai/"):
             model = model.replace("cloudflare-workers-ai/", "cloudflare/", 1)
         self._model: str = model
         self._timeout_seconds: float = timeout_seconds
@@ -275,7 +302,7 @@ class LlmEvaluator:
         if settings.api_account_id:
             account_id = settings.api_account_id.get_secret_value()
             if (
-                settings.model.startswith("cloudflare/")
+                settings.model.startswith(_CF_PREFIX)
                 or settings.model.startswith("cloudflare-workers-ai/")
                 or (settings.model.startswith("openai/") and "@cf/" in settings.model)
             ):
@@ -318,7 +345,7 @@ class LlmEvaluator:
         )
         # Cloudflare Workers AI の一部モデルは system ロールをサポートしないため
         # 'cloudflare/' の場合は system メッセージを user メッセージの先頭に結合する
-        if "cloudflare/" in self._model or "@cf/" in self._model:
+        if _CF_PREFIX in self._model or "@cf/" in self._model:
             messages = [
                 {
                     "role": "user",

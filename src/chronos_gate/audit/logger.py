@@ -26,6 +26,9 @@ _SENSITIVE_VALUE_RE = re.compile(
     r"|[0-9a-fA-F]{32,}",
 )
 
+_MASK = "**********"
+
+
 
 class AuditLogger:
     def __init__(self, level: Literal["INFO", "DEBUG", "ERROR"] = "INFO") -> None:
@@ -72,37 +75,50 @@ class AuditLogger:
 
     def _sanitize_value(self, value: Any, key_name: str | None = None) -> Any:
         """再帰的に機密情報をマスクする。"""
-        # キー名によるチェック(親が辞書の場合)
-        if key_name:
-            k_lower = key_name.lower()
-            # 完全一致チェック
-            if k_lower in _SENSITIVE_KEYS_FULL:
-                return "**********"
-            # 接頭辞一致チェック
-            if any(k_lower.startswith(s) for s in _SENSITIVE_KEYS_PREFIX):
-                return "**********"
-
+        if self._should_mask_key(key_name):
+            return _MASK
         if isinstance(value, str):
-            if key_name and key_name.lower() in {"stacktrace", "traceback"}:
-                return _SENSITIVE_VALUE_RE.sub("**********", value)
-            # 既知の非機密キーは値の内容によるマスクをスキップ
-            if key_name and key_name.lower() in _SAFE_KEYS:
-                return value
-            # 値の内容によるチェック
-            if _SENSITIVE_VALUE_RE.search(value):
-                return "**********"
-            return value
-
+            return self._sanitize_string(value, key_name)
         if isinstance(value, dict):
-            return {str(k): self._sanitize_value(v, key_name=str(k)) for k, v in value.items()}
-
+            return self._sanitize_mapping(value)
         if isinstance(value, (list, tuple)):
-            return [self._sanitize_value(item, key_name=key_name) for item in value]
-
-        if isinstance(value, (int, float, bool)) or value is None:
+            return self._sanitize_sequence(value, key_name)
+        if self._is_json_primitive(value):
             return value
+        return self._sanitize_object(value)
 
+    def _should_mask_key(self, key_name: str | None) -> bool:
+        if key_name is None:
+            return False
+        key_lower = key_name.lower()
+        return key_lower in _SENSITIVE_KEYS_FULL or any(
+            key_lower.startswith(prefix) for prefix in _SENSITIVE_KEYS_PREFIX
+        )
+
+    def _sanitize_string(self, value: str, key_name: str | None) -> str:
+        if key_name is None:
+            return _MASK if _SENSITIVE_VALUE_RE.search(value) else value
+
+        key_lower = key_name.lower()
+        if key_lower in {"stacktrace", "traceback"}:
+            return _SENSITIVE_VALUE_RE.sub(_MASK, value)
+        if key_lower in _SAFE_KEYS:
+            return value
+        return _MASK if _SENSITIVE_VALUE_RE.search(value) else value
+
+    def _sanitize_mapping(self, value: dict[Any, Any]) -> dict[str, Any]:
+        return {str(k): self._sanitize_value(v, key_name=str(k)) for k, v in value.items()}
+
+    def _sanitize_sequence(
+        self, value: list[Any] | tuple[Any, ...], key_name: str | None
+    ) -> list[Any]:
+        return [self._sanitize_value(item, key_name=key_name) for item in value]
+
+    def _is_json_primitive(self, value: Any) -> bool:
+        return isinstance(value, (int, float, bool)) or value is None
+
+    def _sanitize_object(self, value: Any) -> str:
         text = str(value)
         if _SENSITIVE_VALUE_RE.search(text):
-            return "**********"
+            return _MASK
         return text

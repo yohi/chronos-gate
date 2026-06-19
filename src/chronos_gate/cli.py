@@ -151,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         input_ = _read_input(sys.stdin)
-    except (ValueError, json.JSONDecodeError) as exc:
+    except ValueError as exc:
         logger.warning("stdin parse failed: %s", exc)
         _emit_fallback_ask(sys.stdout)
         return 2

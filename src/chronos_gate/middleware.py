@@ -4,6 +4,7 @@ from typing import Any
 
 from starlette.types import Message, Receive, Scope, Send
 
+_HTTP_RESPONSE_START = "http.response.start"
 
 class PayloadTooLargeError(RuntimeError):
     """Raised when the request body exceeds the maximum allowed size."""
@@ -23,7 +24,7 @@ class MaxBodySizeMiddleware:
 
         async def wrapped_send(message: Message) -> None:
             nonlocal response_started
-            if message["type"] == "http.response.start":
+            if message["type"] == _HTTP_RESPONSE_START:
                 response_started = True
             await send(message)
 
@@ -93,7 +94,7 @@ class MaxBodySizeMiddleware:
     async def _send_400(self, send: Send) -> None:
         await send(
             {
-                "type": "http.response.start",
+                "type": _HTTP_RESPONSE_START,
                 "status": 400,
                 "headers": [(b"content-type", b"application/json")],
             }
@@ -108,7 +109,7 @@ class MaxBodySizeMiddleware:
     async def _send_413(self, send: Send) -> None:
         await send(
             {
-                "type": "http.response.start",
+                "type": _HTTP_RESPONSE_START,
                 "status": 413,
                 "headers": [(b"content-type", b"application/json")],
             }

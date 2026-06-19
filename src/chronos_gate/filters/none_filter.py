@@ -8,4 +8,5 @@ from typing import Any
 
 class NoneFilter:
     def apply(self, *, tool_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+        _ = tool_name
         return copy.deepcopy(payload)

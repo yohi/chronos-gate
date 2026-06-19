@@ -14,7 +14,14 @@ from types import MappingProxyType
 from typing import Any, Literal
 
 from chronos_gate.errors import PolicyError
-from chronos_gate.policy.models import GatewayPolicy, ToolGuardrail
+from chronos_gate.policy.models import GatewayPolicy, ParamConstraint, ToolGuardrail
+
+_PARAM_TYPES_MAP: dict[str, type | tuple[type, ...]] = {
+    "string": str,
+    "integer": int,
+    "number": (int, float),
+    "boolean": bool,
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,77 +119,156 @@ class PolicyEngine:
             return
 
         for param_name, constraint in guardrail.params.items():
-            if constraint.forbidden and param_name in arguments:
-                raise PolicyError(
-                    f"parameter {param_name!r} is forbidden for tool {tool_name!r}",
-                    reason=f"forbidden_param:{param_name}",
-                )
-
-            if param_name not in arguments:
-                continue
-
-            val = arguments[param_name]
-
-            # 1. Type check
-            expected_type_str = constraint.type
-            has_string_constraint = (
-                constraint.max_length is not None or constraint.pattern is not None
+            PolicyEngine._validate_param_constraint(
+                tool_name=tool_name,
+                arguments=arguments,
+                param_name=param_name,
+                constraint=constraint,
             )
 
-            if expected_type_str is None and has_string_constraint:
-                expected_type_str = "string"
+        PolicyEngine._validate_requires_approval(tool_name, guardrail)
 
-            if expected_type_str is not None:
-                if expected_type_str in ("integer", "number") and isinstance(val, bool):
-                    raise PolicyError(
-                        f"parameter {param_name!r} must be {expected_type_str}, got boolean",
-                        reason=f"param_type_mismatch:{param_name}",
-                    )
+    @staticmethod
+    def _validate_param_constraint(
+        *,
+        tool_name: str,
+        arguments: dict[str, Any],
+        param_name: str,
+        constraint: ParamConstraint,
+    ) -> None:
+        PolicyEngine._validate_forbidden_param(
+            tool_name=tool_name,
+            arguments=arguments,
+            param_name=param_name,
+            constraint=constraint,
+        )
+        if param_name not in arguments:
+            return
 
-                types_map: dict[str, type | tuple[type, ...]] = {
-                    "string": str,
-                    "integer": int,
-                    "number": (int, float),
-                    "boolean": bool,
-                }
-                if expected_type_str not in types_map:
-                    raise PolicyError(
-                        f"parameter {param_name!r} has unknown type {expected_type_str!r}",
-                        reason=f"param_unknown_type:{param_name}",
-                    )
-                expected_type_cls = types_map[expected_type_str]
-                if not isinstance(val, expected_type_cls):
-                    actual_type = "boolean" if isinstance(val, bool) else type(val).__name__
-                    raise PolicyError(
-                        f"parameter {param_name!r} must be {expected_type_str}, got {actual_type}",
-                        reason=f"param_type_mismatch:{param_name}",
-                    )
+        value = arguments[param_name]
+        PolicyEngine._validate_param_type(param_name, value, constraint)
+        PolicyEngine._validate_allowed_values(param_name, value, constraint)
+        PolicyEngine._validate_string_constraints(param_name, value, constraint)
 
-            # 2. Allowed values
-            if constraint.allowed_values is not None:
-                if not any(v == val and type(v) is type(val) for v in constraint.allowed_values):
-                    raise PolicyError(
-                        f"parameter {param_name!r} has invalid value {val!r}. "
-                        f"allowed: {constraint.allowed_values}",
-                        reason=f"param_not_in_allowed_values:{param_name}",
-                    )
+    @staticmethod
+    def _validate_forbidden_param(
+        *,
+        tool_name: str,
+        arguments: dict[str, Any],
+        param_name: str,
+        constraint: ParamConstraint,
+    ) -> None:
+        if not constraint.forbidden or param_name not in arguments:
+            return
+        raise PolicyError(
+            f"parameter {param_name!r} is forbidden for tool {tool_name!r}",
+            reason=f"forbidden_param:{param_name}",
+        )
 
-            # 3. String-specific constraints
-            if isinstance(val, str):
-                if constraint.max_length is not None and len(val) > constraint.max_length:
-                    raise PolicyError(
-                        f"parameter {param_name!r} exceeds max_length ({constraint.max_length})",
-                        reason=f"param_too_long:{param_name}",
-                    )
-                if constraint.pattern is not None:
-                    if not re.fullmatch(constraint.pattern, val):
-                        raise PolicyError(
-                            f"parameter {param_name!r} does not match required pattern",
-                            reason=f"param_pattern_mismatch:{param_name}",
-                        )
-
-        if guardrail.requires_approval:
+    @staticmethod
+    def _validate_param_type(
+        param_name: str,
+        value: Any,
+        constraint: ParamConstraint,
+    ) -> None:
+        expected_type_str = PolicyEngine._expected_param_type(constraint)
+        if expected_type_str is None:
+            return
+        if expected_type_str in ("integer", "number") and isinstance(value, bool):
             raise PolicyError(
-                f"tool {tool_name!r} requires manual approval which is not yet implemented",
-                reason="requires_approval",
+                f"parameter {param_name!r} must be {expected_type_str}, got boolean",
+                reason=f"param_type_mismatch:{param_name}",
             )
+
+        expected_type_cls = PolicyEngine._expected_type_class(param_name, expected_type_str)
+        if isinstance(value, expected_type_cls):
+            return
+
+        actual_type = "boolean" if isinstance(value, bool) else type(value).__name__
+        raise PolicyError(
+            f"parameter {param_name!r} must be {expected_type_str}, got {actual_type}",
+            reason=f"param_type_mismatch:{param_name}",
+        )
+
+    @staticmethod
+    def _expected_param_type(constraint: ParamConstraint) -> str | None:
+        if constraint.type is not None:
+            return constraint.type
+        if constraint.max_length is not None or constraint.pattern is not None:
+            return "string"
+        return None
+
+    @staticmethod
+    def _expected_type_class(
+        param_name: str,
+        expected_type_str: str,
+    ) -> type | tuple[type, ...]:
+        expected_type_cls = _PARAM_TYPES_MAP.get(expected_type_str)
+        if expected_type_cls is not None:
+            return expected_type_cls
+        raise PolicyError(
+            f"parameter {param_name!r} has unknown type {expected_type_str!r}",
+            reason=f"param_unknown_type:{param_name}",
+        )
+
+    @staticmethod
+    def _validate_allowed_values(
+        param_name: str,
+        value: Any,
+        constraint: ParamConstraint,
+    ) -> None:
+        if constraint.allowed_values is None:
+            return
+        if any(v == value and type(v) is type(value) for v in constraint.allowed_values):
+            return
+        raise PolicyError(
+            f"parameter {param_name!r} has invalid value {value!r}. "
+            f"allowed: {constraint.allowed_values}",
+            reason=f"param_not_in_allowed_values:{param_name}",
+        )
+
+    @staticmethod
+    def _validate_string_constraints(
+        param_name: str,
+        value: Any,
+        constraint: ParamConstraint,
+    ) -> None:
+        if not isinstance(value, str):
+            return
+        PolicyEngine._validate_max_length(param_name, value, constraint)
+        PolicyEngine._validate_pattern(param_name, value, constraint)
+
+    @staticmethod
+    def _validate_max_length(
+        param_name: str,
+        value: str,
+        constraint: ParamConstraint,
+    ) -> None:
+        if constraint.max_length is None or len(value) <= constraint.max_length:
+            return
+        raise PolicyError(
+            f"parameter {param_name!r} exceeds max_length ({constraint.max_length})",
+            reason=f"param_too_long:{param_name}",
+        )
+
+    @staticmethod
+    def _validate_pattern(
+        param_name: str,
+        value: str,
+        constraint: ParamConstraint,
+    ) -> None:
+        if constraint.pattern is None or re.fullmatch(constraint.pattern, value):
+            return
+        raise PolicyError(
+            f"parameter {param_name!r} does not match required pattern",
+            reason=f"param_pattern_mismatch:{param_name}",
+        )
+
+    @staticmethod
+    def _validate_requires_approval(tool_name: str, guardrail: ToolGuardrail) -> None:
+        if not guardrail.requires_approval:
+            return
+        raise PolicyError(
+            f"tool {tool_name!r} requires manual approval which is not yet implemented",
+            reason="requires_approval",
+        )
