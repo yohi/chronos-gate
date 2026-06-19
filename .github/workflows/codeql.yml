@@ -21,7 +21,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-      matrix:
         include:
           - language: python
             build-mode: none
