@@ -105,6 +105,17 @@ def _approval_id_for_log(approval_id: str) -> str:
     return approval_id[:8] + "..."
 
 
+def _resolve_fallback_mode(value: str) -> str:
+    """Validate CHRONOS_EVALUATOR_FALLBACK and fall back to 'allow' on invalid values."""
+    import logging as _logging
+    _logger = _logging.getLogger("chronos_evaluator")
+    if value not in {"allow", "ask"}:
+        _logger.warning(
+            "Invalid CHRONOS_EVALUATOR_FALLBACK=%r, falling back to 'allow'", value,
+        )
+        return "allow"
+    return value
+
 def build_router(
     *,
     handshake: HandshakeService,
@@ -139,7 +150,7 @@ def build_router(
         llm_evaluator=LlmEvaluator.from_env(),
         default_intent=os.getenv("CHRONOS_EVALUATOR_DEFAULT_INTENT", "default"),
         default_agent_id=os.getenv("CHRONOS_EVALUATOR_DEFAULT_AGENT_ID", "claude-code"),
-        fallback_when_llm_not_configured=os.getenv("CHRONOS_EVALUATOR_FALLBACK", "allow"),  # type: ignore
+        fallback_when_llm_not_configured=_resolve_fallback_mode(os.getenv("CHRONOS_EVALUATOR_FALLBACK", "allow")),
     )
 
     router = APIRouter()
