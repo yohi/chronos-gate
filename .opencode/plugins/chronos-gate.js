@@ -153,14 +153,18 @@ async function evaluateTool(toolCall) {
         try {
           const result = JSON.parse(data);
           logDebug(`evaluateTool raw output (http): ${JSON.stringify(result)}`);
-          if (result.decision === 'allow') {
-            resolve({ status: 'allow' });
+          if (result.decision === 'allow' || result.decision === 'ask') {
+            resolve({
+              status: result.decision,
+              reason: result.reason,
+              decision: result.decision,
+              ask_message: result.ask_message
+            });
           } else {
             resolve({
               status: 'deny',
               reason: result.reason,
-              decision: result.decision,
-              ask_message: result.ask_message
+              decision: result.decision
             });
           }
         } catch (e) {
@@ -337,13 +341,17 @@ const permissionAskHook = async (permission, output) => {
       const result = await evaluateTool(toolCall);
       if (result.status === 'allow') {
         output.status = 'allow';
+      } else if (result.status === 'ask') {
+        output.status = 'ask';
+        output.reason = result.ask_message || "Verification required";
+        if (result.ask_message) {
+          showToast(`Evaluation Check: ${result.ask_message}`, "warning");
+        }
       } else {
         output.status = 'deny';
         output.reason = result.reason;
         logDebug(`Permission denied: ${result.reason}`);
-        if (result.decision === 'ask' && result.ask_message) {
-          showToast(`Evaluation Check: ${result.ask_message}`, "warning");
-        } else if (result.reason) {
+        if (result.reason) {
           showToast(`Permission denied: ${result.reason}`, "error");
         }
       }
