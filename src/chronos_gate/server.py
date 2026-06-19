@@ -797,8 +797,6 @@ async def _handle_evaluate_call(
 ) -> Any:
     import logging
 
-    from pydantic import ValidationError
-
     from chronos_gate.errors import AuthError
     from chronos_gate.policy.models_evaluator import ToolCallInput
 
