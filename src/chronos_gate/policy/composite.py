@@ -39,7 +39,7 @@ class CompositeEvaluator:
         llm_evaluator: LlmEvaluator | None,
         default_intent: str = "default",
         default_agent_id: str = "claude-code",
-        fallback_when_llm_not_configured: Literal["allow", "ask"] = "allow",
+        fallback_when_llm_not_configured: Literal["allow", "ask"] = "ask",
         evaluation_cache_ttl_seconds: float = 300.0,
         memory_timeout_seconds: float = 3.0,
     ) -> None:

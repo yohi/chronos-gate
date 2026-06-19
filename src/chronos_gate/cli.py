@@ -100,7 +100,7 @@ def _emit_fallback_ask(stream: IO[str]) -> None:
 
 
 def _fallback_mode_from_env() -> Literal["allow", "ask"]:
-    value = os.getenv("CHRONOS_EVALUATOR_FALLBACK", "allow")
+    value = os.getenv("CHRONOS_EVALUATOR_FALLBACK", "ask")
     if value == "ask":
         return "ask"
     if value == "allow":
