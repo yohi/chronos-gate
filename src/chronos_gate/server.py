@@ -56,10 +56,10 @@ async def _request_approval_with_isolation(
     request: ApprovalRequest,
     audit: AuditLogger,
     sid: str,
-    timeout: float = 5.0,
+    seconds: float = 5.0,
 ) -> None:
     try:
-        async with asyncio.timeout(timeout):
+        async with asyncio.timeout(seconds):
             await approval_notifier.request_approval(request)
     except asyncio.TimeoutError:
         pass
@@ -86,7 +86,7 @@ def _schedule_approval_request(
             request=request,
             audit=audit,
             sid=sid,
-            timeout=timeout,
+            seconds=timeout,
         )
     )
 
@@ -118,7 +118,7 @@ def _resolve_fallback_mode(value: str) -> Literal["allow", "ask"]:
     return "ask"
 
 
-async def _handle_sse(
+def _handle_sse(
     request: Request,
     *,
     handshake: HandshakeService,
@@ -156,7 +156,7 @@ async def _handle_sse(
         try:
             while not await request.is_disconnected():
                 await _keep_alive()
-        except asyncio.CancelledError:
+        except asyncio.CancelledError:  # NOSONAR
             # Client disconnected; let the generator return cleanly.
             return
 
@@ -197,7 +197,7 @@ async def _register_approval(
     )
 
 
-async def _handle_requires_approval_without_registry(
+def _handle_requires_approval_without_registry(
     *,
     rpc_id: Any,
     sid: str,
@@ -324,7 +324,7 @@ async def _handle_requires_approval_with_registry(
 
     approval_decision = await approval_registry.wait_for_decision(
         approval_id,
-        timeout=approval_timeout_seconds,
+        seconds=approval_timeout_seconds,
     )
 
     try:
@@ -442,7 +442,7 @@ async def _handle_tool_call(
 
     match decision.status:
         case "DENY":
-            return await _process_deny(
+            return _process_deny(
                 rpc_id=rpc_id,
                 sid=sid,
                 record=record,
@@ -495,7 +495,7 @@ async def _handle_tool_call(
     )
 
 
-async def _process_deny(
+def _process_deny(
     *,
     rpc_id: Any,
     sid: str,
@@ -533,7 +533,7 @@ async def _process_requires_approval(
     if approval_blocking_mode and approval_registry is None:
         raise RuntimeError("approval_registry precondition was not enforced")
     if approval_registry is None:
-        response = await _handle_requires_approval_without_registry(
+        response = _handle_requires_approval_without_registry(
             rpc_id=rpc_id,
             sid=sid,
             record=record,
@@ -846,14 +846,14 @@ async def _handle_evaluate_call(
         )
         decision = await shared_evaluator.evaluate(input_)
         return decision.to_dict()
-    except (ValidationError, ValueError) as exc:
+    except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("Unexpected error during evaluation")
         raise HTTPException(status_code=500, detail="Internal server error") from exc
 
 
-async def _handle_healthz() -> dict[str, str]:
+def _handle_healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
@@ -908,7 +908,7 @@ def build_router(
         },
     )
     async def sse(request: Request) -> Any:
-        return await _handle_sse(request, handshake=handshake, audit=audit)
+        return _handle_sse(request, handshake=handshake, audit=audit)
 
     @router.post(
         "/messages",
@@ -962,6 +962,6 @@ def build_router(
 
     @router.get("/healthz")
     async def healthz() -> dict[str, str]:
-        return await _handle_healthz()
+        return _handle_healthz()
 
     return router

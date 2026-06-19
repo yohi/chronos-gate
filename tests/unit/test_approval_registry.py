@@ -49,7 +49,7 @@ class TestWaitForDecision:
         aid = await reg.register(session_id="s1", requester_agent_id="agent-a", request=_req())
         outcome = await reg.resolve(aid, resolver_agent_id="op", status=DecisionStatus.APPROVED)
         assert outcome is ResolveOutcome.OK
-        d = await reg.wait_for_decision(aid, timeout=0.1)
+        d = await reg.wait_for_decision(aid, seconds=0.1)
         assert d.status is DecisionStatus.APPROVED
 
     @pytest.mark.asyncio
@@ -62,7 +62,7 @@ class TestWaitForDecision:
             status=DecisionStatus.REJECTED,
             reason="policy violation",
         )
-        d = await reg.wait_for_decision(aid, timeout=0.1)
+        d = await reg.wait_for_decision(aid, seconds=0.1)
         assert d.status is DecisionStatus.REJECTED
         assert d.reason is not None
         assert d.reason == "policy violation"
@@ -71,13 +71,13 @@ class TestWaitForDecision:
     async def test_times_out(self) -> None:
         reg = PendingApprovalRegistry()
         aid = await reg.register(session_id="s1", requester_agent_id="agent-a", request=_req())
-        d = await reg.wait_for_decision(aid, timeout=0.05)
+        d = await reg.wait_for_decision(aid, seconds=0.05)
         assert d.status is DecisionStatus.TIMEOUT
 
     @pytest.mark.asyncio
     async def test_unknown_id_returns_rejected(self) -> None:
         reg = PendingApprovalRegistry()
-        d = await reg.wait_for_decision("does-not-exist", timeout=0.05)
+        d = await reg.wait_for_decision("does-not-exist", seconds=0.05)
         assert d.status is DecisionStatus.REJECTED
         assert d.reason is not None
         assert d.reason == "not_found_or_evicted"
@@ -89,10 +89,10 @@ class TestWaitForDecision:
         await reg.resolve(aid, resolver_agent_id="op", status=DecisionStatus.APPROVED)
 
         # First waiter pops it
-        await reg.wait_for_decision(aid, timeout=0.1)
+        await reg.wait_for_decision(aid, seconds=0.1)
 
         # Second waiter should see the same decision
-        d = await reg.wait_for_decision(aid, timeout=0.1)
+        d = await reg.wait_for_decision(aid, seconds=0.1)
         assert d.status is DecisionStatus.APPROVED
 
     @pytest.mark.asyncio
@@ -102,7 +102,7 @@ class TestWaitForDecision:
 
         started_event = asyncio.Event()
         task = asyncio.create_task(
-            reg.wait_for_decision(aid, timeout=1.0, started_event=started_event)
+            reg.wait_for_decision(aid, seconds=1.0, started_event=started_event)
         )
         await started_event.wait()
         task.cancel()
@@ -141,7 +141,7 @@ class TestResolve:
             aid, resolver_agent_id="agent-a", status=DecisionStatus.APPROVED
         )
         assert outcome is ResolveOutcome.FORBIDDEN
-        d = await reg.wait_for_decision(aid, timeout=0.05)
+        d = await reg.wait_for_decision(aid, seconds=0.05)
         assert d.status is DecisionStatus.TIMEOUT
 
     @pytest.mark.asyncio
@@ -169,7 +169,7 @@ class TestResolve:
             status=DecisionStatus.REJECTED,
             reason=long_reason,
         )
-        d = await reg.wait_for_decision(aid, timeout=0.1)
+        d = await reg.wait_for_decision(aid, seconds=0.1)
         assert d.status is DecisionStatus.REJECTED
         assert d.reason is not None
         assert len(d.reason) == 256
@@ -190,7 +190,7 @@ class TestResolve:
         await reg.resolve(aid, resolver_agent_id="op", status=DecisionStatus.APPROVED)
 
         # Waiter consumes it
-        await reg.wait_for_decision(aid, timeout=0.1)
+        await reg.wait_for_decision(aid, seconds=0.1)
 
         # Subsequent resolve should return ALREADY_RESOLVED instead of NOT_FOUND
         outcome = await reg.resolve(aid, resolver_agent_id="op", status=DecisionStatus.APPROVED)
@@ -213,12 +213,12 @@ class TestCancelSession:
 
         await reg.cancel_session("s1")
 
-        d_a = await reg.wait_for_decision(aid_s1_a, timeout=0.05)
-        d_b = await reg.wait_for_decision(aid_s1_b, timeout=0.05)
+        d_a = await reg.wait_for_decision(aid_s1_a, seconds=0.05)
+        d_b = await reg.wait_for_decision(aid_s1_b, seconds=0.05)
         assert d_a.status is DecisionStatus.REJECTED
         assert d_b.status is DecisionStatus.REJECTED
 
-        d_c = await reg.wait_for_decision(aid_s2, timeout=0.05)
+        d_c = await reg.wait_for_decision(aid_s2, seconds=0.05)
         assert d_c.status is DecisionStatus.TIMEOUT
 
     @pytest.mark.asyncio
@@ -226,7 +226,7 @@ class TestCancelSession:
         reg = PendingApprovalRegistry()
         aid = await reg.register(session_id="s1", requester_agent_id="agent-a", request=_req())
         await reg.cancel_session("s1", reason="custom_reason")
-        d = await reg.wait_for_decision(aid, timeout=0.05)
+        d = await reg.wait_for_decision(aid, seconds=0.05)
         assert d.status is DecisionStatus.REJECTED
         assert d.reason is not None
         assert d.reason == "custom_reason"

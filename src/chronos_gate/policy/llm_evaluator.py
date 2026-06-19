@@ -159,7 +159,7 @@ def _looks_like_json_object(text: str) -> bool:
 def _parse_json_decision(text: str) -> Decision:
     try:
         parsed = cast(object, json.loads(text))
-    except (json.JSONDecodeError, ValueError) as exc:
+    except ValueError as exc:
         raise ResponseParseError(f"Failed to parse JSON response: {exc}") from exc
 
     if not isinstance(parsed, dict):

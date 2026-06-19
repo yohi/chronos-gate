@@ -2798,7 +2798,7 @@ class TestApprovalsEndpoint:
             resolver_agent_id="operator",
             status=DecisionStatus.APPROVED,
         )
-        await registry.wait_for_decision(approval_id, timeout=0.1)
+        await registry.wait_for_decision(approval_id, seconds=0.1)
 
         import httpx
         from httpx import ASGITransport
@@ -2910,7 +2910,7 @@ class TestApprovalsEndpoint:
         assert resp.json() == {"status": "resolved", "approval_id": approval_id}
 
         # Verify outcome via registry
-        decision = await registry.wait_for_decision(approval_id, timeout=1.0)
+        decision = await registry.wait_for_decision(approval_id, seconds=1.0)
         assert decision.status == DecisionStatus.APPROVED
 
     @pytest.mark.asyncio

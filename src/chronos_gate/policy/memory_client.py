@@ -110,7 +110,7 @@ class MemoryClient:
     def _parse_response(self, response: Any) -> list[MemoryItem]:
         try:
             data = cast(object, response.json())
-        except (ValueError, UnicodeDecodeError) as exc:
+        except ValueError as exc:
             raise MemoryFetchError(f"invalid JSON from dashboard: {exc}") from exc
 
         if not isinstance(data, list):

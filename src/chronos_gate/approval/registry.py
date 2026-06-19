@@ -66,7 +66,7 @@ class PendingApprovalRegistry:
         self,
         approval_id: str,
         *,
-        timeout: float,
+        seconds: float,
         started_event: asyncio.Event | None = None,
     ) -> ApprovalDecision:
         async with self._lock:
@@ -83,7 +83,7 @@ class PendingApprovalRegistry:
         try:
             if started_event:
                 started_event.set()
-            async with asyncio.timeout(timeout):
+            async with asyncio.timeout(seconds):
                 await event.wait()
         except asyncio.TimeoutError:
             async with self._lock:
