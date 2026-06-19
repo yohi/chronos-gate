@@ -601,7 +601,7 @@ async def _execute_tool_call(
             reason="sanitize",
             agent=record.agent_id,
             sid=sid,
-            tool="tool_name",
+            tool=tool_name,
             error=str(exc),
         )
         return _jsonrpc_error(rpc_id, -32602, "Policy violation")
@@ -611,7 +611,7 @@ async def _execute_tool_call(
             decision="upstream_error",
             agent=record.agent_id,
             sid=sid,
-            tool="tool_name",
+            tool=tool_name,
         )
         return _jsonrpc_error(rpc_id, -32000, "upstream_error")
 

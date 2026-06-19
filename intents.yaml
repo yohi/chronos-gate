@@ -46,7 +46,7 @@ intents:
 
   # 記憶の編集・整理インテント（破壊的操作には承認を強制）
   curate_memories:
-    description: "Curate own working memory. Allowed to save/delete with approval."
+    description: "Curate own working memory. Allowed to save. Destructive operations (delete, prune) require approval."
     allowed_tools: [memory_save, memory_delete, memory_prune]
     output_filter: full_access
     guardrails:

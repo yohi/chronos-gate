@@ -29,6 +29,12 @@ class MaxBodySizeMiddleware:
                 response_started = True
             await send(message)
 
+        # Check for duplicate Content-Length headers to prevent request smuggling
+        content_lengths = [v for k, v in scope["headers"] if k.lower() == b"content-length"]
+        if len(content_lengths) > 1:
+            await self._send_400(wrapped_send)
+            return
+
         headers = dict(scope["headers"])
         if b"content-length" in headers:
             handled = await self._handle_content_length(

@@ -71,13 +71,13 @@ class TestWaitForDecision:
     async def test_times_out(self) -> None:
         reg = PendingApprovalRegistry()
         aid = await reg.register(session_id="s1", requester_agent_id="agent-a", request=_req())
-        d = await reg.wait_for_decision(aid, seconds=0.05)
+        d = await reg.wait_for_decision(aid, seconds=0.5)
         assert d.status is DecisionStatus.TIMEOUT
 
     @pytest.mark.asyncio
     async def test_unknown_id_returns_rejected(self) -> None:
         reg = PendingApprovalRegistry()
-        d = await reg.wait_for_decision("does-not-exist", seconds=0.05)
+        d = await reg.wait_for_decision("does-not-exist", seconds=0.5)
         assert d.status is DecisionStatus.REJECTED
         assert d.reason is not None
         assert d.reason == "not_found_or_evicted"

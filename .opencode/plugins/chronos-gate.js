@@ -75,7 +75,9 @@ if (fs.existsSync(globalEnvPath)) {
   const globalEnv = loadEnvFile(globalEnvPath);
   logDebug(`Loaded global config from ${globalEnvPath}`);
   for (const [k, v] of Object.entries(globalEnv)) {
-    process.env[k] = v;
+    if (process.env[k] === undefined) {
+      process.env[k] = v;
+    }
   }
 }
 

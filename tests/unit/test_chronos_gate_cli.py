@@ -33,7 +33,17 @@ def _run_cli_with_input(
         patch("sys.stdin", stdin),
         patch("sys.stdout", stdout),
         patch("sys.stderr", stderr),
-        patch.dict("os.environ", env or {}, clear=False),
+        patch.dict(
+            "os.environ",
+            {
+                **{
+                    "CHRONOS_EVALUATOR_FALLBACK": "ask",
+                    "CHRONOS_EVALUATOR_LOG_LEVEL": "WARNING",
+                },
+                **(env or {}),
+            },
+            clear=True,
+        ),
     ):
         code = main(["--json-io"] if argv is None else argv)
     return code, stdout.getvalue(), stderr.getvalue()
@@ -155,8 +165,11 @@ def test_invalid_log_level_falls_back_to_warning_and_proceeds(
     """Invalid CHRONOS_EVALUATOR_LOG_LEVEL must not crash the CLI.
     It logs a warning and proceeds with normal execution."""
     with caplog.at_level(logging.WARNING, logger="chronos_gate"):
-        with patch.dict("os.environ", {"CHRONOS_EVALUATOR_LOG_LEVEL": "INVALID"}):
-            code, out, _ = _run_cli_with_input('{"tool_name":"bash"}', argv=["--json-io"])
+        code, out, _ = _run_cli_with_input(
+            '{"tool_name":"bash"}',
+            argv=["--json-io"],
+            env={"CHRONOS_EVALUATOR_LOG_LEVEL": "INVALID"},
+        )
     assert code == 0
     body = _loads_json_object(out.strip())
     assert body["decision"] == "allow"

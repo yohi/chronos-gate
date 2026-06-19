@@ -14,7 +14,11 @@ def _serve() -> None:
 
     try:
         host = os.getenv("MCP_GATEWAY_HOST", "127.0.0.1")
-        port = int(os.getenv("MCP_GATEWAY_PORT", "9100"))
+        port_str = os.getenv("MCP_GATEWAY_PORT", "9100")
+        try:
+            port = int(port_str)
+        except ValueError:
+            raise ValueError(f"MCP_GATEWAY_PORT must be an integer, got: {port_str!r}")
         uvicorn.run(
             "chronos_gate.app:build_app",
             factory=True,
