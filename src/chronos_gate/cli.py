@@ -27,7 +27,7 @@ from chronos_gate.policy.models_evaluator import Decision, ToolCallInput
 logger = logging.getLogger("chronos_evaluator.cli")
 
 _FALLBACK_ASK = Decision(
-    decision="ask",
+    verdict="ask",
     ask_message="System evaluation failed. Human confirmation required.",
 )
 
@@ -43,7 +43,7 @@ def _configure_stderr_logging(level: str = "WARNING") -> None:
     legacy_logger = logging.getLogger("chronos_evaluator.cli")
 
     for log in (gateway_logger, legacy_logger):
-        for handler in list(log.handlers):
+        for handler in log.handlers:
             log.removeHandler(handler)
 
     handler = logging.StreamHandler(stream=sys.stderr)

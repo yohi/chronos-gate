@@ -359,7 +359,7 @@ class TestD2ReadOnlyToolBypass:
 
         mock_llm = MagicMock()
         mock_llm.judge = AsyncMock(
-            return_value=Decision(decision="allow", reason="should not be called"),
+            return_value=Decision(verdict="allow", reason="should not be called"),
         )
         mock_memory = MagicMock()
         mock_memory.retrieve = AsyncMock(return_value=[])
@@ -383,7 +383,7 @@ class TestD2ReadOnlyToolBypass:
 
         decision = await evaluator.evaluate(input_)
 
-        assert decision.decision == "allow"
+        assert decision.verdict == "allow"
         # LLM / memory はバイパスされ呼ばれない
         mock_llm.judge.assert_not_called()
         mock_memory.retrieve.assert_not_called()
@@ -395,7 +395,7 @@ class TestD2ReadOnlyToolBypass:
 
         mock_llm = MagicMock()
         mock_llm.judge = AsyncMock(
-            return_value=Decision(decision="allow", reason="llm allowed"),
+            return_value=Decision(verdict="allow", reason="llm allowed"),
         )
         mock_memory = MagicMock()
         mock_memory.retrieve = AsyncMock(return_value=[])
@@ -418,6 +418,6 @@ class TestD2ReadOnlyToolBypass:
 
         decision = await evaluator.evaluate(input_)
 
-        assert decision.decision == "allow"
+        assert decision.verdict == "allow"
         # 非 READ_ONLY なので LLM が確実に呼ばれる (バイパス回帰防止)
         mock_llm.judge.assert_called_once()

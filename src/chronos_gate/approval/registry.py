@@ -83,7 +83,8 @@ class PendingApprovalRegistry:
         try:
             if started_event:
                 started_event.set()
-            await asyncio.wait_for(event.wait(), timeout=timeout)
+            async with asyncio.timeout(timeout):
+                await event.wait()
         except asyncio.TimeoutError:
             async with self._lock:
                 entry = self._pending.pop(approval_id, None)

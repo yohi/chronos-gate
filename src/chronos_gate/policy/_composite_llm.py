@@ -151,6 +151,6 @@ def _fallback_from_llm_error(
     fut: asyncio.Future[Decision],
 ) -> Decision:
     logger.warning("Tier-2 fallback to ask: %s", exc)
-    fallback_decision = Decision(decision="ask", ask_message=_FALLBACK_ASK_MESSAGE)
+    fallback_decision = Decision(verdict="ask", ask_message=_FALLBACK_ASK_MESSAGE)
     _set_future_result(fut, fallback_decision)
     return fallback_decision

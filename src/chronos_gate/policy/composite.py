@@ -26,6 +26,7 @@ from .models_evaluator import (
 
 logger = logging.getLogger("chronos_evaluator")
 
+
 class CompositeEvaluator:
     def __init__(
         self,
@@ -110,7 +111,7 @@ class CompositeEvaluator:
                 requested_tools=None,
             )
         except PolicyError as exc:
-            return Decision(decision="deny", reason=(exc.reason or "policy_violation"))
+            return Decision(verdict="deny", reason=(exc.reason or "policy_violation"))
 
     def _evaluate_tier1_call(self, input_: ToolCallInput, grant: Grant) -> Decision | None:
         try:
@@ -120,7 +121,7 @@ class CompositeEvaluator:
                 arguments=input_.tool_input,
             )
         except PolicyError as exc:
-            return Decision(decision="deny", reason=(exc.reason or "policy_violation"))
+            return Decision(verdict="deny", reason=(exc.reason or "policy_violation"))
         return self._decision_from_tier1(input_, tier1)
 
     @staticmethod
@@ -128,10 +129,10 @@ class CompositeEvaluator:
         status = getattr(tier1, "status", None)
         reason = getattr(tier1, "reason", None)
         if status == "DENY":
-            return Decision(decision="deny", reason=(reason or "guardrail_violation"))
+            return Decision(verdict="deny", reason=(reason or "guardrail_violation"))
         if status == "REQUIRES_APPROVAL":
             return Decision(
-                decision="ask",
+                verdict="ask",
                 ask_message=f"Tool {input_.tool_name!r} requires manual approval.",
             )
         if status == "ALLOW":
@@ -142,13 +143,13 @@ class CompositeEvaluator:
             status,
             input_.tool_name,
         )
-        return Decision(decision="deny", reason="unexpected_evaluation_status")
+        return Decision(verdict="deny", reason="unexpected_evaluation_status")
 
     def _decision_before_llm(self, input_: ToolCallInput, grant: Grant) -> Decision | None:
         if self._should_skip_llm(input_, grant):
-            return Decision(decision="allow")
+            return Decision(verdict="allow")
         if input_.tool_name in READ_ONLY_TOOLS:
-            return Decision(decision="allow")
+            return Decision(verdict="allow")
         if self._llm is None:
             return self._decision_without_llm()
         return None
@@ -161,10 +162,10 @@ class CompositeEvaluator:
     def _decision_without_llm(self) -> Decision:
         if self._fallback == "ask":
             return Decision(
-                decision="ask",
+                verdict="ask",
                 ask_message="LLM evaluator is not configured; human confirmation required.",
             )
-        return Decision(decision="allow")
+        return Decision(verdict="allow")
 
     async def _fetch_memories_safely(self, input_: ToolCallInput) -> list[MemoryItem]:
         if self._memory is None:

@@ -6,6 +6,7 @@ from starlette.types import Message, Receive, Scope, Send
 
 _HTTP_RESPONSE_START = "http.response.start"
 
+
 class PayloadTooLargeError(RuntimeError):
     """Raised when the request body exceeds the maximum allowed size."""
 

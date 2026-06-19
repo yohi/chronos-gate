@@ -34,6 +34,7 @@ _ASK_MESSAGE_MAX = 300
 READ_ONLY_TOOLS = frozenset({"memory_search", "memory_search_graph", "memory_stats"})
 
 _CF_PREFIX = "cloudflare/"
+_CF_WORKERS_PREFIX = "cloudflare-workers-ai/"
 
 
 class LlmUnavailableError(Exception):
@@ -173,7 +174,7 @@ def _parse_json_decision(text: str) -> Decision:
 def _decision_from_json_object(obj: Mapping[str, object]) -> Decision:
     decision = obj.get("decision")
     if decision == "allow":
-        return Decision(decision="allow")
+        return Decision(verdict="allow")
     if decision == "deny":
         return _deny_decision_from_json(obj)
     if decision == "ask":
@@ -184,23 +185,23 @@ def _decision_from_json_object(obj: Mapping[str, object]) -> Decision:
 def _deny_decision_from_json(obj: Mapping[str, object]) -> Decision:
     reason = obj.get("reason")
     if isinstance(reason, str) and reason.strip():
-        return Decision(decision="deny", reason=reason[:_REASON_MAX])
+        return Decision(verdict="deny", reason=reason[:_REASON_MAX])
     raise ResponseParseError("JSON response missing or invalid 'reason' for 'deny' decision")
 
 
 def _ask_decision_from_json(obj: Mapping[str, object]) -> Decision:
     ask_message = obj.get("ask_message")
     if isinstance(ask_message, str) and ask_message.strip():
-        return Decision(decision="ask", ask_message=ask_message[:_ASK_MESSAGE_MAX])
+        return Decision(verdict="ask", ask_message=ask_message[:_ASK_MESSAGE_MAX])
     raise ResponseParseError("JSON response missing or invalid 'ask_message' for 'ask' decision")
 
 
 def _parse_plain_text_decision(stripped: str) -> Decision:
     normalized = stripped.lower()
     if "safe" in normalized and "unsafe" not in normalized:
-        return Decision(decision="allow")
+        return Decision(verdict="allow")
     if "unsafe" in normalized:
-        return Decision(decision="deny", reason=_unsafe_reason(stripped))
+        return Decision(verdict="deny", reason=_unsafe_reason(stripped))
 
     raise ResponseParseError("non-JSON response and could not parse as safety label")
 
@@ -277,11 +278,9 @@ class LlmEvaluator:
         api_account_id: str | None = None,
     ) -> None:
         self._api_key: str = api_key
-        # For backward compatibility, normalize 'cloudflare-workers-ai/' prefix to 'cloudflare/'
-        if model.startswith("cloudflare-workers-ai/"):
-            model = model.replace("cloudflare-workers-ai/", _CF_PREFIX, 1)
-        if model.startswith("cloudflare-workers-ai/"):
-            model = model.replace("cloudflare-workers-ai/", "cloudflare/", 1)
+        # For backward compatibility, normalize prefix to _CF_PREFIX.
+        if model.startswith(_CF_WORKERS_PREFIX):
+            model = model.replace(_CF_WORKERS_PREFIX, _CF_PREFIX, 1)
         self._model: str = model
         self._timeout_seconds: float = timeout_seconds
         self._max_tokens: int = max_tokens
@@ -303,7 +302,7 @@ class LlmEvaluator:
             account_id = settings.api_account_id.get_secret_value()
             if (
                 settings.model.startswith(_CF_PREFIX)
-                or settings.model.startswith("cloudflare-workers-ai/")
+                or settings.model.startswith(_CF_WORKERS_PREFIX)
                 or (settings.model.startswith("openai/") and "@cf/" in settings.model)
             ):
                 extra_args["api_base"] = (

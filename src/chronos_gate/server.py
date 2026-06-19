@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any, Literal, TypeGuard
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -59,13 +59,10 @@ async def _request_approval_with_isolation(
     timeout: float = 5.0,
 ) -> None:
     try:
-        await asyncio.wait_for(
-            approval_notifier.request_approval(request),
-            timeout=timeout,
-        )
-    # Non-critical notifier failures must not break the main request flow.
-    # We swallow them after audit logging because notifier_exc is recorded via
-    # audit.log(error_type=...) and the client has already received approval_required.
+        async with asyncio.timeout(timeout):
+            await approval_notifier.request_approval(request)
+    except asyncio.TimeoutError:
+        pass
     except Exception as notifier_exc:  # noqa: BLE001 - deliberate isolation boundary
         audit.log(
             ev="notification_failed",
@@ -97,7 +94,7 @@ def _schedule_approval_request(
 def _is_validation_deny(reason: str | None) -> bool:
     if reason is None:
         return False
-    return reason.startswith("param_") or reason.startswith("forbidden_param:")
+    return reason.startswith(("param_", "forbidden_param:"))
 
 
 def _approval_id_for_log(approval_id: str) -> str:
@@ -160,7 +157,8 @@ async def _handle_sse(
             while not await request.is_disconnected():
                 await _keep_alive()
         except asyncio.CancelledError:
-            pass
+            # Client disconnected; let the generator return cleanly.
+            return
 
     return EventSourceResponse(event_stream(), ping=15)
 
@@ -396,6 +394,12 @@ async def _handle_requires_approval_with_registry(
     )
 
 
+def _build_deny_error(reason: str | None) -> dict[str, Any]:
+    if _is_validation_deny(reason):
+        return {"code": -32602, "message": reason}
+    return {"code": -32601, "message": "tool not found"}
+
+
 async def _handle_tool_call(
     *,
     rpc_id: Any,
@@ -438,20 +442,14 @@ async def _handle_tool_call(
 
     match decision.status:
         case "DENY":
-            audit.log(
-                ev="call",
-                decision="deny",
-                reason=decision.reason,
-                agent=record.agent_id,
+            return await _process_deny(
+                rpc_id=rpc_id,
                 sid=sid,
-                tool=tool_name,
+                record=record,
+                decision=decision,
+                audit=audit,
+                tool_name=tool_name,
             )
-            error = (
-                {"code": -32602, "message": decision.reason}
-                if _is_validation_deny(decision.reason)
-                else {"code": -32601, "message": "tool not found"}
-            )
-            return JSONResponse({"jsonrpc": "2.0", "id": rpc_id, "error": error})
         case "ALLOW" | "REQUIRES_APPROVAL" if _contains_secret(arguments):
             audit.log(
                 ev="call",
@@ -463,38 +461,122 @@ async def _handle_tool_call(
             )
             return _jsonrpc_error(rpc_id, -32601, "tool not found")
         case "REQUIRES_APPROVAL":
-            if approval_blocking_mode and approval_registry is None:
-                raise RuntimeError("approval_registry precondition was not enforced")
-            if approval_registry is None:
-                return await _handle_requires_approval_without_registry(
-                    rpc_id=rpc_id,
-                    sid=sid,
-                    record=record,
-                    tool_name=tool_name,
-                    arguments=arguments,
-                    audit=audit,
-                    approval_notifier=approval_notifier,
-                )
-            approval_response, was_approved, approval_ref, record = (
-                await _handle_requires_approval_with_registry(
-                    rpc_id=rpc_id,
-                    sid=sid,
-                    record=record,
-                    tool_name=tool_name,
-                    arguments=arguments,
-                    sessions=sessions,
-                    audit=audit,
-                    approval_notifier=approval_notifier,
-                    approval_registry=approval_registry,
-                    approval_blocking_mode=approval_blocking_mode,
-                    approval_timeout_seconds=approval_timeout_seconds,
-                )
+            response, was_approved, approval_ref = await _process_requires_approval(
+                rpc_id=rpc_id,
+                sid=sid,
+                record=record,
+                tool_name=tool_name,
+                arguments=arguments,
+                sessions=sessions,
+                audit=audit,
+                approval_notifier=approval_notifier,
+                approval_registry=approval_registry,
+                approval_blocking_mode=approval_blocking_mode,
+                approval_timeout_seconds=approval_timeout_seconds,
             )
-            if approval_response is not None:
-                return approval_response
+            if response is not None:
+                return response
         case "ALLOW":
+            # Intentional no-op: proceed to output filter and proxy call below.
             pass
+            # Intentional no-op: proceed to output filter and proxy call below.
 
+    return await _execute_tool_call(
+        rpc_id=rpc_id,
+        sid=sid,
+        record=record,
+        arguments=arguments,
+        upstream=upstream,
+        policy=policy,
+        audit=audit,
+        tool_name=tool_name,
+        was_approved=was_approved,
+        approval_ref=approval_ref,
+    )
+
+
+async def _process_deny(
+    *,
+    rpc_id: Any,
+    sid: str,
+    record: Any,
+    decision: Any,
+    audit: AuditLogger,
+    tool_name: str,
+) -> JSONResponse:
+    audit.log(
+        ev="call",
+        decision="deny",
+        reason=decision.reason,
+        agent=record.agent_id,
+        sid=sid,
+        tool=tool_name,
+    )
+    error = _build_deny_error(decision.reason)
+    return JSONResponse({"jsonrpc": "2.0", "id": rpc_id, "error": error})
+
+
+async def _process_requires_approval(
+    *,
+    rpc_id: Any,
+    sid: str,
+    record: Any,
+    tool_name: str,
+    arguments: dict[str, Any],
+    sessions: SessionRegistry,
+    audit: AuditLogger,
+    approval_notifier: ApprovalNotifier,
+    approval_registry: PendingApprovalRegistry | None,
+    approval_blocking_mode: bool,
+    approval_timeout_seconds: float,
+) -> tuple[JSONResponse | None, bool, str | None]:
+    if approval_blocking_mode and approval_registry is None:
+        raise RuntimeError("approval_registry precondition was not enforced")
+    if approval_registry is None:
+        response = await _handle_requires_approval_without_registry(
+            rpc_id=rpc_id,
+            sid=sid,
+            record=record,
+            tool_name=tool_name,
+            arguments=arguments,
+            audit=audit,
+            approval_notifier=approval_notifier,
+        )
+        return (response, False, None)
+    (
+        _approval_response,
+        was_approved,
+        approval_ref,
+        _,
+    ) = await _handle_requires_approval_with_registry(
+        rpc_id=rpc_id,
+        sid=sid,
+        record=record,
+        tool_name=tool_name,
+        arguments=arguments,
+        sessions=sessions,
+        audit=audit,
+        approval_notifier=approval_notifier,
+        approval_registry=approval_registry,
+        approval_blocking_mode=approval_blocking_mode,
+        approval_timeout_seconds=approval_timeout_seconds,
+    )
+    return (_approval_response, was_approved, approval_ref)
+
+
+async def _execute_tool_call(
+    *,
+    rpc_id: Any,
+    sid: str,
+    record: Any,
+    arguments: dict[str, Any],
+    upstream: Any,
+    policy: GatewayPolicy,
+    audit: AuditLogger,
+    tool_name: str,
+    was_approved: bool,
+    approval_ref: str | None,
+) -> JSONResponse:
     if record.output_filter_profile not in policy.output_filters:
         audit.log(
             ev="call",
@@ -519,7 +601,7 @@ async def _handle_tool_call(
             reason="sanitize",
             agent=record.agent_id,
             sid=sid,
-            tool=tool_name,
+            tool="tool_name",
         )
         return _jsonrpc_error(rpc_id, -32602, str(exc))
     except UpstreamError:
@@ -528,7 +610,7 @@ async def _handle_tool_call(
             decision="upstream_error",
             agent=record.agent_id,
             sid=sid,
-            tool=tool_name,
+            tool="tool_name",
         )
         return _jsonrpc_error(rpc_id, -32000, "upstream_error")
 
@@ -604,6 +686,27 @@ async def _handle_messages(
     return _jsonrpc_error(rpc_id, -32601, f"unknown method {method!r}")
 
 
+def _is_valid_approval_id(approval_id: Any) -> TypeGuard[str]:
+    if not isinstance(approval_id, str) or len(approval_id) != 32:
+        return False
+    return all(c in "0123456789abcdef" for c in approval_id)
+
+
+async def _parse_approval_body(request: Request) -> dict[str, Any] | JSONResponse:
+    raw_body = bytearray()
+    async for chunk in request.stream():
+        raw_body.extend(chunk)
+        if len(raw_body) > 1024:
+            return JSONResponse({"error": "payload_too_large"}, status_code=413)
+    try:
+        body = json.loads(raw_body)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JSONResponse({"error": "invalid_request"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "invalid_request"}, status_code=400)
+    return body
+
+
 async def _handle_approvals(
     request: Request,
     *,
@@ -622,26 +725,14 @@ async def _handle_approvals(
     except AuthError:
         return JSONResponse({"error": "auth_failed"}, status_code=401)
 
-    raw_body = bytearray()
-    async for chunk in request.stream():
-        raw_body.extend(chunk)
-        if len(raw_body) > 1024:
-            return JSONResponse({"error": "payload_too_large"}, status_code=413)
-    try:
-        body = json.loads(raw_body)
-    except (json.JSONDecodeError, UnicodeDecodeError):
-        return JSONResponse({"error": "invalid_request"}, status_code=400)
-    if not isinstance(body, dict):
-        return JSONResponse({"error": "invalid_request"}, status_code=400)
+    parsed = await _parse_approval_body(request)
+    if isinstance(parsed, JSONResponse):
+        return parsed
+    body = parsed
 
     approval_id = body.get("approval_id")
     raw_decision = body.get("decision")
-    if (
-        not isinstance(approval_id, str)
-        or len(approval_id) != 32
-        or not all(c in "0123456789abcdef" for c in approval_id)
-        or raw_decision not in {"approve", "reject"}
-    ):
+    if not _is_valid_approval_id(approval_id) or raw_decision not in {"approve", "reject"}:
         return JSONResponse({"error": "invalid_request"}, status_code=400)
 
     requester_id = await approval_registry.get_requester_agent_id(approval_id)
@@ -684,12 +775,16 @@ async def _handle_approvals(
         audit_fields["reason"] = normalized_reason
     audit.log(ev="approval_decision", **audit_fields)
 
-    if outcome.value == "ok":
+    return _build_approval_response(outcome.value, approval_id)
+
+
+def _build_approval_response(outcome: str, approval_id: str) -> JSONResponse:
+    if outcome == "ok":
         return JSONResponse(
             {"status": "resolved", "approval_id": approval_id},
             status_code=200,
         )
-    if outcome.value == "forbidden":
+    if outcome == "forbidden":
         return JSONResponse({"error": "self_approval_forbidden"}, status_code=403)
     return JSONResponse({"error": "approval_not_found"}, status_code=404)
 
@@ -870,4 +965,3 @@ def build_router(
         return await _handle_healthz()
 
     return router
-

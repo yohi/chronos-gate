@@ -56,7 +56,7 @@ async def test_tier1_deny_short_circuits() -> None:
         memory=None,
     )
     out = await ev.evaluate(ToolCallInput(tool_name="bash", tool_input={"command": "rm -rf /"}))
-    assert out == Decision(decision="deny", reason="forbidden")
+    assert out == Decision(verdict="deny", reason="forbidden")
     llm.judge.assert_not_called()
 
 
@@ -70,7 +70,7 @@ async def test_tier1_requires_approval_returns_ask() -> None:
         memory=None,
     )
     out = await ev.evaluate(ToolCallInput(tool_name="bash", tool_input={}))
-    assert out.decision == "ask"
+    assert out.verdict == "ask"
     assert "manual approval" in (out.ask_message or "")
     llm.judge.assert_not_called()
 
@@ -83,7 +83,7 @@ async def test_allow_with_no_llm_returns_allow_default_fallback() -> None:
         memory=None,
     )
     out = await ev.evaluate(ToolCallInput(tool_name="bash", tool_input={"command": "ls"}))
-    assert out == Decision(decision="allow")
+    assert out == Decision(verdict="allow")
 
 
 @pytest.mark.asyncio
@@ -95,20 +95,20 @@ async def test_allow_with_no_llm_returns_ask_when_fallback_is_ask() -> None:
         fallback="ask",
     )
     out = await ev.evaluate(ToolCallInput(tool_name="bash", tool_input={"command": "ls"}))
-    assert out.decision == "ask"
+    assert out.verdict == "ask"
 
 
 @pytest.mark.asyncio
 async def test_llm_allow_passes_through() -> None:
     llm = MagicMock()
-    llm.judge = AsyncMock(return_value=Decision(decision="allow"))
+    llm.judge = AsyncMock(return_value=Decision(verdict="allow"))
     ev = _make_evaluator(
         tier1_result=EvaluationResult(status="ALLOW"),
         llm=llm,
         memory=None,
     )
     out = await ev.evaluate(ToolCallInput(tool_name="bash", tool_input={"command": "ls"}))
-    assert out == Decision(decision="allow")
+    assert out == Decision(verdict="allow")
     llm.judge.assert_awaited_once()
     kwargs = llm.judge.await_args.kwargs
     assert list(kwargs["memories"]) == []
@@ -119,7 +119,7 @@ async def test_read_only_tools_bypass_llm_and_memory() -> None:
     from chronos_gate.policy.llm_evaluator import READ_ONLY_TOOLS
 
     llm = MagicMock()
-    llm.judge = AsyncMock(return_value=Decision(decision="ask", ask_message="confirm?"))
+    llm.judge = AsyncMock(return_value=Decision(verdict="ask", ask_message="confirm?"))
     memory = MagicMock()
     memory.retrieve = AsyncMock(return_value=[])
     ev = _make_evaluator(
@@ -130,7 +130,7 @@ async def test_read_only_tools_bypass_llm_and_memory() -> None:
 
     for tool_name in READ_ONLY_TOOLS:
         out = await ev.evaluate(ToolCallInput(tool_name=tool_name, tool_input={"query": "test"}))
-        assert out == Decision(decision="allow")
+        assert out == Decision(verdict="allow")
 
     llm.judge.assert_not_called()
     memory.retrieve.assert_not_called()
@@ -139,7 +139,7 @@ async def test_read_only_tools_bypass_llm_and_memory() -> None:
 @pytest.mark.asyncio
 async def test_llm_decision_is_cached_for_repeated_write_call() -> None:
     llm = MagicMock()
-    llm.judge = AsyncMock(return_value=Decision(decision="allow"))
+    llm.judge = AsyncMock(return_value=Decision(verdict="allow"))
     memory = MagicMock()
     memory.retrieve = AsyncMock(return_value=[])
     ev = _make_evaluator(
@@ -152,8 +152,8 @@ async def test_llm_decision_is_cached_for_repeated_write_call() -> None:
     first = await ev.evaluate(input_)
     second = await ev.evaluate(input_)
 
-    assert first == Decision(decision="allow")
-    assert second == Decision(decision="allow")
+    assert first == Decision(verdict="allow")
+    assert second == Decision(verdict="allow")
     llm.judge.assert_awaited_once()
     memory.retrieve.assert_awaited_once()
 
@@ -161,7 +161,7 @@ async def test_llm_decision_is_cached_for_repeated_write_call() -> None:
 @pytest.mark.asyncio
 async def test_memory_fetch_timeout_does_not_block_llm() -> None:
     llm = MagicMock()
-    llm.judge = AsyncMock(return_value=Decision(decision="allow"))
+    llm.judge = AsyncMock(return_value=Decision(verdict="allow"))
     memory = MagicMock()
 
     async def slow_retrieve(*args: object, **kwargs: object) -> list[object]:
@@ -178,7 +178,7 @@ async def test_memory_fetch_timeout_does_not_block_llm() -> None:
 
     out = await ev.evaluate(ToolCallInput(tool_name="memory_save", tool_input={"content": "x"}))
 
-    assert out == Decision(decision="allow")
+    assert out == Decision(verdict="allow")
     kwargs = llm.judge.await_args.kwargs
     assert kwargs["memories"] == []
 
@@ -186,33 +186,33 @@ async def test_memory_fetch_timeout_does_not_block_llm() -> None:
 @pytest.mark.asyncio
 async def test_llm_deny_passes_through() -> None:
     llm = MagicMock()
-    llm.judge = AsyncMock(return_value=Decision(decision="deny", reason="dangerous"))
+    llm.judge = AsyncMock(return_value=Decision(verdict="deny", reason="dangerous"))
     ev = _make_evaluator(
         tier1_result=EvaluationResult(status="ALLOW"),
         llm=llm,
         memory=None,
     )
     out = await ev.evaluate(ToolCallInput(tool_name="bash", tool_input={"command": "ls"}))
-    assert out.decision == "deny"
+    assert out.verdict == "deny"
 
 
 @pytest.mark.asyncio
 async def test_llm_ask_passes_through() -> None:
     llm = MagicMock()
-    llm.judge = AsyncMock(return_value=Decision(decision="ask", ask_message="confirm?"))
+    llm.judge = AsyncMock(return_value=Decision(verdict="ask", ask_message="confirm?"))
     ev = _make_evaluator(
         tier1_result=EvaluationResult(status="ALLOW"),
         llm=llm,
         memory=None,
     )
     out = await ev.evaluate(ToolCallInput(tool_name="bash", tool_input={"command": "ls"}))
-    assert out.decision == "ask"
+    assert out.verdict == "ask"
 
 
 @pytest.mark.asyncio
 async def test_memory_fetch_failure_does_not_block_llm() -> None:
     llm = MagicMock()
-    llm.judge = AsyncMock(return_value=Decision(decision="allow"))
+    llm.judge = AsyncMock(return_value=Decision(verdict="allow"))
     memory = MagicMock()
     memory.retrieve = AsyncMock(side_effect=MemoryFetchError("boom"))
     ev = _make_evaluator(
@@ -221,7 +221,7 @@ async def test_memory_fetch_failure_does_not_block_llm() -> None:
         memory=memory,
     )
     out = await ev.evaluate(ToolCallInput(tool_name="bash", tool_input={"command": "ls"}))
-    assert out == Decision(decision="allow")
+    assert out == Decision(verdict="allow")
     kwargs = llm.judge.await_args.kwargs
     assert list(kwargs["memories"]) == []
 
@@ -236,7 +236,7 @@ async def test_llm_unavailable_falls_back_to_ask() -> None:
         memory=None,
     )
     out = await ev.evaluate(ToolCallInput(tool_name="bash", tool_input={"command": "ls"}))
-    assert out.decision == "ask"
+    assert out.verdict == "ask"
     assert "System evaluation failed" in (out.ask_message or "")
 
 
@@ -250,7 +250,7 @@ async def test_llm_parse_error_falls_back_to_ask() -> None:
         memory=None,
     )
     out = await ev.evaluate(ToolCallInput(tool_name="bash", tool_input={"command": "ls"}))
-    assert out.decision == "ask"
+    assert out.verdict == "ask"
 
 
 @pytest.mark.asyncio
@@ -265,7 +265,7 @@ async def test_policy_error_on_grant_returns_deny() -> None:
         default_agent_id="claude-code",
     )
     out = await ev.evaluate(ToolCallInput(tool_name="bash", tool_input={}))
-    assert out.decision == "deny"
+    assert out.verdict == "deny"
     assert "unknown_intent" in (out.reason or "")
 
 
@@ -287,7 +287,7 @@ async def test_policy_error_on_call_returns_deny() -> None:
         default_agent_id="claude-code",
     )
     out = await ev.evaluate(ToolCallInput(tool_name="bash", tool_input={}))
-    assert out.decision == "deny"
+    assert out.verdict == "deny"
     assert "unknown_intent" in (out.reason or "")
 
 
@@ -316,6 +316,6 @@ async def test_unknown_tier1_status_returns_deny(
 
     with caplog.at_level(logging.WARNING, logger="chronos_evaluator"):
         out = await ev.evaluate(ToolCallInput(tool_name="bash", tool_input={}))
-    assert out.decision == "deny"
+    assert out.verdict == "deny"
     assert "unexpected_evaluation_status" in (out.reason or "")
     assert any("Unexpected tier1 status" in r.message for r in caplog.records)

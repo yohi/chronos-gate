@@ -32,12 +32,14 @@ def _mask_secret_fields(instance: Any, handler: Any, info: SerializationInfo) ->
         return data
 
     for field_name, field_info in instance.__class__.model_fields.items():
-        if field_info.annotation is SecretStr or (
-            hasattr(field_info.annotation, "__args__")
-            and SecretStr in getattr(field_info.annotation, "__args__", ())
-        ):
-            if data.get(field_name) is not None:
-                data[field_name] = "**********"
+        if (
+            field_info.annotation is SecretStr
+            or (
+                hasattr(field_info.annotation, "__args__")
+                and SecretStr in getattr(field_info.annotation, "__args__", ())
+            )
+        ) and data.get(field_name) is not None:
+            data[field_name] = "**********"
     return data
 
 

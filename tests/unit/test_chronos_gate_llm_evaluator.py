@@ -25,8 +25,8 @@ def _ok_response(json_text: str) -> SimpleNamespace:
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
-        ('{"decision":"allow"}', Decision(decision="allow")),
-        ('  {"decision": "allow"}  ', Decision(decision="allow")),
+        ('{"decision":"allow"}', Decision(verdict="allow")),
+        ('  {"decision": "allow"}  ', Decision(verdict="allow")),
     ],
 )
 def test_parse_allow(text: str, expected: Decision) -> None:
@@ -35,12 +35,12 @@ def test_parse_allow(text: str, expected: Decision) -> None:
 
 def test_parse_deny_with_reason() -> None:
     out = _parse_decision('{"decision":"deny","reason":"forbidden command"}')
-    assert out == Decision(decision="deny", reason="forbidden command")
+    assert out == Decision(verdict="deny", reason="forbidden command")
 
 
 def test_parse_ask_with_message() -> None:
     out = _parse_decision('{"decision":"ask","ask_message":"please confirm"}')
-    assert out == Decision(decision="ask", ask_message="please confirm")
+    assert out == Decision(verdict="ask", ask_message="please confirm")
 
 
 def test_parse_truncates_long_reason() -> None:
@@ -290,7 +290,7 @@ async def test_judge_returns_allow_on_valid_response(mock_litellm: AsyncMock) ->
         memories=[],
     )
 
-    assert out == Decision(decision="allow")
+    assert out == Decision(verdict="allow")
     # 呼び出し引数を最低限検証する
     assert mock_litellm.await_count == 1
     kwargs = mock_litellm.await_args.kwargs

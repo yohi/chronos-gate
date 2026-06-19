@@ -16,7 +16,6 @@ logger = logging.getLogger(__name__)
 _MASK = "**********"
 
 
-
 def _deep_freeze(v: Any) -> Any:
     """再帰的にオブジェクトを不変な形式に変換します。"""
     if isinstance(v, (dict, MappingProxyType, Mapping)):
@@ -48,8 +47,7 @@ class ApprovalRequest(BaseModel):
         return cast(Mapping[str, Any], _deep_freeze(v))
 
 
-def sanitize_for_log(data: Any) -> Any:
-    """ログ出力用に機密情報をマスクします。"""
+def _sanitize_mapping(data: Any) -> dict[str, Any]:
     sensitive_tokens = {
         "api",
         "key",
@@ -61,50 +59,53 @@ def sanitize_for_log(data: Any) -> Any:
         "email",
         "client",
     }
+    new_data: dict[str, Any] = {}
+    for k, v in data.items():
+        key_str = str(k).lower()
+        normalized_key = re.sub(r"[^a-z0-9]", "", key_str)
+        is_sensitive = any(token in normalized_key for token in sensitive_tokens)
+        if is_sensitive:
+            new_data[str(k)] = _MASK
+        else:
+            new_data[str(k)] = sanitize_for_log(v)
+    return new_data
 
+
+def _sanitize_sequence(data: Any) -> Any:
+    sanitized = [sanitize_for_log(i) for i in data]
+    if isinstance(data, list):
+        return sanitized
+    if isinstance(data, tuple):
+        return tuple(sanitized)
+    return type(data)(sanitized)
+
+
+def _is_sensitive_string(value: str) -> bool:
+    if "@" in value and "." in value:
+        return True
+    if re.match(r"^\d{3}-\d{2}-\d{4}$", value):
+        return True
+    if re.search(r"Bearer\s+\S+", value, re.I):
+        return True
+    if re.match(r"^[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+$", value):
+        return True
+    if re.match(r"^[a-fA-F0-9]{32,}$", value):
+        return True
+    if len(value) >= 32 and re.match(r"^[a-zA-Z0-9+/]+={0,2}$", value):
+        return True
+    if re.match(r"^\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}$", value):
+        return True
+    return False
+
+
+def sanitize_for_log(data: Any) -> Any:
+    """ログ出力用に機密情報をマスクします。"""
     if isinstance(data, (dict, MappingProxyType, Mapping)):
-        new_data = {}
-        for k, v in data.items():
-            key_str = str(k).lower()
-            # 正規化: 英数字以外を削除して判定
-            normalized_key = re.sub(r"[^a-z0-9]", "", key_str)
-
-            is_sensitive = any(token in normalized_key for token in sensitive_tokens)
-
-            if is_sensitive:
-                new_data[str(k)] = _MASK
-            else:
-                new_data[str(k)] = sanitize_for_log(v)
-        return new_data
-
+        return _sanitize_mapping(data)
     if isinstance(data, (list, tuple, set, frozenset)):
-        sanitized = [sanitize_for_log(i) for i in data]
-        if isinstance(data, list):
-            return sanitized
-        if isinstance(data, tuple):
-            return tuple(sanitized)
-        if isinstance(data, (set, frozenset)):
-            return type(data)(sanitized)
-
-    if isinstance(data, str):
-        # メールアドレスの簡易パターンマスク
-        if "@" in data and "." in data:
-            return _MASK
-        # SSN (XXX-XX-XXXX) の簡易パターンマスク
-        if re.match(r"^\d{3}-\d{2}-\d{4}$", data):
-            return _MASK
-        # Secret patterns: Bearer, JWT, long hex/base64, credit card
-        if (
-            re.search(r"Bearer\s+\S+", data, re.I)
-            or re.match(r"^[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+\.[a-zA-Z0-9\-_]+$", data)  # JWT
-            or re.match(r"^[a-fA-F0-9]{32,}$", data)  # Long hex key (at least 32 chars)
-            or (
-                len(data) >= 32 and re.match(r"^[a-zA-Z0-9+/]+={0,2}$", data)
-            )  # Long base64-like key
-            or re.match(r"^\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}$", data)  # Credit card
-        ):
-            return _MASK
-
+        return _sanitize_sequence(data)
+    if isinstance(data, str) and _is_sensitive_string(data):
+        return _MASK
     return data
 
 

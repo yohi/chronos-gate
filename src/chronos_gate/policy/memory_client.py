@@ -4,7 +4,7 @@ import logging
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlsplit
 
 from chronos_gate.policy.models_evaluator import MemoryItem
@@ -105,6 +105,9 @@ class MemoryClient:
         if response.status_code != 200:
             raise MemoryFetchError(f"dashboard returned status {response.status_code}")
 
+        return self._parse_response(response)
+
+    def _parse_response(self, response: Any) -> list[MemoryItem]:
         try:
             data = cast(object, response.json())
         except (ValueError, UnicodeDecodeError) as exc:
@@ -113,43 +116,48 @@ class MemoryClient:
         if not isinstance(data, list):
             raise MemoryFetchError(f"expected list, got {type(data).__name__}")
 
-        items: list[MemoryItem] = []
-        for item in cast(list[object], data):
-            if not isinstance(item, Mapping):
-                logger.warning("skipping malformed memory item: non-object")
-                continue
-            memory = cast(Mapping[str, object], item)
-            try:
-                # content must be strictly str
-                content = memory.get("content")
-                if not isinstance(content, str):
-                    logger.warning("skipping malformed memory item: content must be str")
-                    continue
+        parsed_items = self._parse_memory_items(cast(list[object], data))
+        return [item for item in parsed_items if item is not None]
 
-                # memory_type should be str or None
-                raw_type_alt = memory.get("memoryType")
-                raw_type_fallback = memory.get("memory_type")
-                raw_type = raw_type_alt if raw_type_alt is not None else raw_type_fallback
-
-                if raw_type is not None and not isinstance(raw_type, str):
-                    logger.warning("skipping malformed memory item: memory_type must be str")
-                    continue
-                memory_type = raw_type or ""
-
-                importance_value = memory.get("importance")
-                if not isinstance(importance_value, (int, float, str)):
-                    importance_value = 0.0
-
-                items.append(
-                    MemoryItem(
-                        content=content,
-                        memory_type=memory_type,
-                        importance=float(importance_value),
-                    )
-                )
-            except (KeyError, TypeError, ValueError) as exc:
-                logger.warning("skipping malformed memory item: %s", exc)
+    def _parse_memory_items(self, data: list[object]) -> list[MemoryItem | None]:
+        items: list[MemoryItem | None] = []
+        for item in data:
+            parsed = self._parse_single_memory(item)
+            items.append(parsed)
         return items
+
+    def _parse_single_memory(self, item: object) -> MemoryItem | None:
+        if not isinstance(item, Mapping):
+            logger.warning("skipping malformed memory item: non-object")
+            return None
+
+        memory = cast(Mapping[str, object], item)
+        content = memory.get("content")
+        if not isinstance(content, str):
+            logger.warning("skipping malformed memory item: content must be str")
+            return None
+
+        raw_type = memory.get("memoryType")
+        if raw_type is None:
+            raw_type = memory.get("memory_type")
+        if raw_type is not None and not isinstance(raw_type, str):
+            logger.warning("skipping malformed memory item: memory_type must be str")
+            return None
+        memory_type = raw_type or ""
+
+        importance_value = memory.get("importance")
+        if not isinstance(importance_value, (int, float, str)):
+            importance_value = 0.0
+
+        try:
+            return MemoryItem(
+                content=content,
+                memory_type=memory_type,
+                importance=float(importance_value),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            logger.warning("skipping malformed memory item: %s", exc)
+            return None
 
 
 def _allowed_hosts_from_env() -> frozenset[str]:

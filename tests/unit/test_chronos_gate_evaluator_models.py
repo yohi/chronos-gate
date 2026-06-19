@@ -17,36 +17,36 @@ from chronos_gate.policy.models_evaluator import (
 
 class TestDecisionToDict:
     def test_allow_omits_optional_fields(self) -> None:
-        d = Decision(decision="allow")
+        d = Decision(verdict="allow")
         assert d.to_dict() == {"decision": "allow"}
 
     def test_deny_serialises_reason(self) -> None:
-        d = Decision(decision="deny", reason="violates rule X")
+        d = Decision(verdict="deny", reason="violates rule X")
         assert d.to_dict() == {"decision": "deny", "reason": "violates rule X"}
 
     def test_ask_serialises_message(self) -> None:
-        d = Decision(decision="ask", ask_message="confirm please")
+        d = Decision(verdict="ask", ask_message="confirm please")
         assert d.to_dict() == {"decision": "ask", "ask_message": "confirm please"}
 
     def test_ask_without_message_raises(self) -> None:
         with pytest.raises(ValueError, match="ask_message is required"):
-            Decision(decision="ask")
+            Decision(verdict="ask")
         with pytest.raises(ValueError, match="ask_message is required"):
-            Decision(decision="ask", ask_message="")
+            Decision(verdict="ask", ask_message="")
         with pytest.raises(ValueError, match="ask_message is required"):
-            Decision(decision="ask", ask_message="   ")
+            Decision(verdict="ask", ask_message="   ")
 
     def test_deny_without_reason_raises(self) -> None:
         with pytest.raises(ValueError, match="reason is required"):
-            Decision(decision="deny")
+            Decision(verdict="deny")
         with pytest.raises(ValueError, match="reason is required"):
-            Decision(decision="deny", reason="")
+            Decision(verdict="deny", reason="")
         with pytest.raises(ValueError, match="reason is required"):
-            Decision(decision="deny", reason="   ")
+            Decision(verdict="deny", reason="   ")
 
     def test_invalid_decision_raises(self) -> None:
-        with pytest.raises(ValueError, match="Invalid decision"):
-            Decision(decision="invalid")  # type: ignore[arg-type]
+        with pytest.raises(ValueError, match="Invalid verdict"):
+            Decision(verdict="invalid")  # type: ignore[arg-type]
 
 
 class TestSummarizeToolInput:

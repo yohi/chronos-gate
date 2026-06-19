@@ -103,25 +103,23 @@ class MemoryItem:
 
 @dataclass(frozen=True, slots=True)
 class Decision:
-    decision: Literal["allow", "deny", "ask"]
+    verdict: Literal["allow", "deny", "ask"]
     reason: str | None = None
     ask_message: str | None = None
 
     def __post_init__(self) -> None:
-        if self.decision not in ("allow", "deny", "ask"):
-            raise ValueError(
-                f"Invalid decision: {self.decision}. Must be 'allow', 'deny', or 'ask'."
-            )
-        if self.decision == "deny" and not (self.reason and self.reason.strip()):
-            raise ValueError("reason is required and must be non-empty for decision=deny")
-        if self.decision == "ask" and not (self.ask_message and self.ask_message.strip()):
-            raise ValueError("ask_message is required and must be non-empty for decision=ask")
+        if self.verdict not in ("allow", "deny", "ask"):
+            raise ValueError(f"Invalid verdict: {self.verdict}. Must be 'allow', 'deny', or 'ask'.")
+        if self.verdict == "deny" and not (self.reason and self.reason.strip()):
+            raise ValueError("reason is required and must be non-empty for verdict=deny")
+        if self.verdict == "ask" and not (self.ask_message and self.ask_message.strip()):
+            raise ValueError("ask_message is required and must be non-empty for verdict=ask")
 
     def to_dict(self) -> dict[str, Any]:
-        out: dict[str, Any] = {"decision": self.decision}
-        if self.decision in ("allow", "deny"):
+        out: dict[str, Any] = {"decision": self.verdict}
+        if self.verdict in ("allow", "deny"):
             if self.reason is not None:
                 out["reason"] = self.reason
-        elif self.decision == "ask":
+        elif self.verdict == "ask":
             out["ask_message"] = self.ask_message
         return out

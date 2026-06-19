@@ -29,7 +29,6 @@ _SENSITIVE_VALUE_RE = re.compile(
 _MASK = "**********"
 
 
-
 class AuditLogger:
     def __init__(self, level: Literal["INFO", "DEBUG", "ERROR"] = "INFO") -> None:
         self.set_level(level)

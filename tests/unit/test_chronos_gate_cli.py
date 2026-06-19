@@ -43,7 +43,7 @@ def _run_cli_with_input(
 def _patch_composite() -> Iterator[PatchedComposite]:
     """Patch CompositeEvaluator.from_env to return a mock by default."""
     fake = MagicMock()
-    fake.evaluate = AsyncMock(return_value=Decision(decision="allow"))
+    fake.evaluate = AsyncMock(return_value=Decision(verdict="allow"))
     with patch("chronos_gate.cli._build_composite_evaluator", return_value=fake) as m:
         yield m, fake
 
@@ -66,7 +66,7 @@ def test_allow_path_writes_single_line_json_and_exit_0(
 
 def test_deny_path_includes_reason(_patch_composite: PatchedComposite) -> None:
     _, fake = _patch_composite
-    fake.evaluate = AsyncMock(return_value=Decision(decision="deny", reason="bad"))
+    fake.evaluate = AsyncMock(return_value=Decision(verdict="deny", reason="bad"))
     payload = json.dumps({"tool_name": "bash", "tool_input": {"command": "rm"}})
     code, out, _ = _run_cli_with_input(payload)
     assert code == 0
@@ -75,7 +75,7 @@ def test_deny_path_includes_reason(_patch_composite: PatchedComposite) -> None:
 
 def test_ask_path_includes_message(_patch_composite: PatchedComposite) -> None:
     _, fake = _patch_composite
-    fake.evaluate = AsyncMock(return_value=Decision(decision="ask", ask_message="confirm"))
+    fake.evaluate = AsyncMock(return_value=Decision(verdict="ask", ask_message="confirm"))
     payload = json.dumps({"tool_name": "bash", "tool_input": {}})
     code, out, _ = _run_cli_with_input(payload)
     assert code == 0
