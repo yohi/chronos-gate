@@ -79,7 +79,7 @@ def build_app(
 
     async def _on_session_evicted(sid: str, reason: str) -> None:
         try:
-            await approval_registry.cancel_session(sid)
+            await approval_registry.cancel_session(sid, reason=reason)
         except Exception as exc:
             audit.log(
                 ev="session_evict_failed",
