@@ -140,11 +140,11 @@ def test_logger_output_goes_to_stderr_only(
 
 
 def test_unknown_fallback_env_warns(caplog: pytest.LogCaptureFixture) -> None:
-    """Invalid CHRONOS_EVALUATOR_FALLBACK triggers a logger.warning before defaulting to 'allow'."""
+    """Invalid CHRONOS_EVALUATOR_FALLBACK triggers a logger.warning before defaulting to 'ask'."""
     with caplog.at_level(logging.WARNING, logger="chronos_evaluator.cli"):
         with patch.dict("os.environ", {"CHRONOS_EVALUATOR_FALLBACK": "invalid_value"}):
             result = _fallback_mode_from_env()
-    assert result == "allow"
+    assert result == "ask"
     assert "Unknown CHRONOS_EVALUATOR_FALLBACK='invalid_value'" in caplog.text
 
 

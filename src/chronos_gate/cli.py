@@ -105,8 +105,8 @@ def _fallback_mode_from_env() -> Literal["allow", "ask"]:
         return "ask"
     if value == "allow":
         return "allow"
-    logger.warning("Unknown CHRONOS_EVALUATOR_FALLBACK=%r, defaulting to 'allow'", value)
-    return "allow"
+    logger.warning("Unknown CHRONOS_EVALUATOR_FALLBACK=%r, defaulting to 'ask'", value)
+    return "ask"
 
 
 def _build_composite_evaluator(policy_path: Path) -> CompositeEvaluator:

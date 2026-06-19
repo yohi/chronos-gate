@@ -106,7 +106,7 @@ def _approval_id_for_log(approval_id: str) -> str:
 
 
 def _resolve_fallback_mode(value: str) -> Literal["allow", "ask"]:
-    """Validate CHRONOS_EVALUATOR_FALLBACK and fall back to 'allow' on invalid values."""
+    """Validate CHRONOS_EVALUATOR_FALLBACK and fall back to 'ask' on invalid values."""
     import logging as _logging
 
     _logger = _logging.getLogger("chronos_evaluator")
@@ -115,21 +115,10 @@ def _resolve_fallback_mode(value: str) -> Literal["allow", "ask"]:
     if value == "allow":
         return "allow"
     _logger.warning(
-        "Invalid CHRONOS_EVALUATOR_FALLBACK=%r, falling back to 'allow'",
+        "Invalid CHRONOS_EVALUATOR_FALLBACK=%r, falling back to 'ask'",
         value,
     )
-    return "allow"
-    """Validate CHRONOS_EVALUATOR_FALLBACK and fall back to 'allow' on invalid values."""
-    import logging as _logging
-
-    _logger = _logging.getLogger("chronos_evaluator")
-    if value not in {"allow", "ask"}:
-        _logger.warning(
-            "Invalid CHRONOS_EVALUATOR_FALLBACK=%r, falling back to 'allow'",
-            value,
-        )
-        return "allow"
-    return value
+    return "ask"
 
 
 async def _handle_sse(
