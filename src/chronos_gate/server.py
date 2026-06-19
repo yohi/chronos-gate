@@ -150,7 +150,7 @@ def build_router(
         llm_evaluator=LlmEvaluator.from_env(),
         default_intent=os.getenv("CHRONOS_EVALUATOR_DEFAULT_INTENT", "default"),
         default_agent_id=os.getenv("CHRONOS_EVALUATOR_DEFAULT_AGENT_ID", "claude-code"),
-        fallback_when_llm_not_configured=_resolve_fallback_mode(os.getenv("CHRONOS_EVALUATOR_FALLBACK", "allow")),
+        fallback_when_llm_not_configured=_resolve_fallback_mode(os.getenv("CHRONOS_EVALUATOR_FALLBACK", "ask")),
     )
 
     router = APIRouter()
