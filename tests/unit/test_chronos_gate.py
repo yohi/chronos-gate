@@ -2634,7 +2634,7 @@ class TestBlockingModeHandlerDirect:
         assert '"approval_ref":"' in allow_log[0]
 
         import re
-        
+
         full_hex = re.findall(r"[0-9a-f]{32}", err)
         # session_id (sid) is not masked and is a valid hex string, so exclude it
         full_hex = [h for h in full_hex if h != rec.session_id]

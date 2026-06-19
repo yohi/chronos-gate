@@ -49,7 +49,8 @@ def test_extra_env_vars_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
     settings = EvaluatorSettings(_env_file=None)  # type: ignore[call-arg]
 
     assert not hasattr(settings, "max_tokens")
-    assert not hasattr(settings, 'timeout_seconds')
+    assert not hasattr(settings, "timeout_seconds")
+
 
 def test_api_account_id_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """CHRONOS_EVALUATOR_API_ACCOUNT_ID で api_account_id が設定されることを検証する。"""
