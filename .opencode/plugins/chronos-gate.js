@@ -199,7 +199,7 @@ if (!global.__chronos_active_evaluations) {
   global.__chronos_active_evaluations = new Set();
 }
 const activeEvaluations = global.__chronos_active_evaluations;
-let permissionAskedListenerRegistered = false;
+const permissionAskedListeners = new WeakMap();
 
 // Helper to show TUI toast message with slight delay to ensure TUI layer is ready
 function showToast(message, variant = "info") {
@@ -407,7 +407,11 @@ async function handleTuiPermissionAsked(api, event) {
 
   if (!permission) {
     logDebug('permission.asked event missing permission payload. Rejecting for safety.');
-    await replyToTuiPermission(api, event, 'reject');
+    try {
+      await replyToTuiPermission(api, event, 'reject');
+    } catch (replyErr) {
+      logDebug(`permission.asked reply error: ${replyErr.message}`);
+    }
     return;
   }
 
@@ -419,21 +423,29 @@ async function handleTuiPermissionAsked(api, event) {
     logDebug(`permission.asked auto-replied with: ${reply}`);
   } catch (err) {
     logDebug(`permission.asked evaluation error: ${err.message}. Rejecting for safety.`);
-    await replyToTuiPermission(api, event, 'reject');
+    try {
+      await replyToTuiPermission(api, event, 'reject');
+    } catch (replyErr) {
+      logDebug(`permission.asked reply error: ${replyErr.message}`);
+    }
   }
 }
 
 function registerPermissionAskedHandler(api) {
-  if (permissionAskedListenerRegistered) return;
+  if (permissionAskedListeners.has(api.event)) return;
   if (!canRegisterPermissionAsked(api)) {
     logDebug('TUI permission.asked API unavailable. Skipping temporary permission adapter.');
     return;
   }
 
   api.event.on('permission.asked', async (event) => {
-    await handleTuiPermissionAsked(api, event);
+    try {
+      await handleTuiPermissionAsked(api, event);
+    } catch (handlerErr) {
+      logDebug(`permission.asked handler error: ${handlerErr.message}`);
+    }
   });
-  permissionAskedListenerRegistered = true;
+  permissionAskedListeners.set(api.event, true);
   logDebug('Registered temporary TUI permission.asked adapter.');
 }
 

@@ -133,6 +133,7 @@ test('TUI permission.asked rejects when Chronos Gate asks for review', async () 
     assert.equal(typeof handler, 'function');
     await handler(createPermissionEvent());
 
+    assert.equal(replies.length, 1);
     assert.equal(replies[0].body.reply, 'reject');
   });
 });
@@ -148,6 +149,7 @@ test('TUI permission.asked rejects when Chronos Gate denies the command', async 
     assert.equal(typeof handler, 'function');
     await handler(createPermissionEvent());
 
+    assert.equal(replies.length, 1);
     assert.equal(replies[0].body.reply, 'reject');
   });
 });
