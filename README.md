@@ -18,7 +18,7 @@ ChronosGate は、AI エージェントのツール呼び出しを **determinist
 uv pip install "chronos-gate @ git+https://github.com/yohi/chronos-gate.git"
 
 # OpenCode プラグイン
-npm install @yohi/opencode-plugin-chronos-gate
+npm install @yohi/chronos-gate
 ```
 
 ## クイックスタート
@@ -46,7 +46,7 @@ chronos-gate run
   "plugins": [
     {
       "name": "chronos-safety-gate",
-      "path": "./node_modules/@yohi/opencode-plugin-chronos-gate",
+      "path": "./node_modules/@yohi/chronos-gate",
       "enabled": true
     }
   ]

@@ -1,5 +1,5 @@
 {
-  "name": "@yohi/opencode-plugin-chronos-gate",
+  "name": "@yohi/chronos-gate",
   "version": "1.0.0",
   "private": false,
   "repository": {

@@ -453,7 +453,7 @@ function registerPermissionAskedHandler(api) {
 // OpenCode Plugin Specification compliant export
 // --------------------------------------------------------------------------
 module.exports = {
-  id: "@yohi/opencode-plugin-chronos-gate",
+  id: "@yohi/chronos-gate",
   "permission.ask": permissionAskHook,
   tui: async (api) => {
     logDebug("TUI plugin activation function called.");
