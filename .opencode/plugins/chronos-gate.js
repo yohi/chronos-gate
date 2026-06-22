@@ -3,6 +3,8 @@ const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
 
+// allow: SIZE_OK — temporary OpenCode plugin entrypoint keeps gateway bootstrap and permission hooks together to avoid package topology changes.
+
 const gatewayPort = process.env.MCP_GATEWAY_PORT || '9100';
 
 
@@ -197,6 +199,7 @@ if (!global.__chronos_active_evaluations) {
   global.__chronos_active_evaluations = new Set();
 }
 const activeEvaluations = global.__chronos_active_evaluations;
+const permissionAskedListeners = new WeakMap();
 
 // Helper to show TUI toast message with slight delay to ensure TUI layer is ready
 function showToast(message, variant = "info") {
@@ -366,18 +369,106 @@ const permissionAskHook = async (permission, output) => {
   }
 };
 
+function canRegisterPermissionAsked(api) {
+  return !!(
+    api &&
+    api.event &&
+    typeof api.event.on === 'function' &&
+    api.client &&
+    api.client.v2 &&
+    api.client.v2.session &&
+    api.client.v2.session.permission &&
+    typeof api.client.v2.session.permission.reply === 'function'
+  );
+}
+
+async function replyToTuiPermission(api, event, reply) {
+  const properties = event && event.properties ? event.properties : {};
+  const sessionID = properties.sessionID;
+  const requestID = properties.id || properties.requestID;
+
+  if (!sessionID || !requestID) {
+    logDebug('permission.asked event missing sessionID or request id. Skipping SDK reply.');
+    return;
+  }
+
+  await api.client.v2.session.permission.reply({
+    sessionID,
+    requestID,
+    body: {
+      reply
+    }
+  });
+}
+
+async function handleTuiPermissionAsked(api, event) {
+  const properties = event && event.properties ? event.properties : {};
+  const permission = properties.permission;
+
+  if (!permission) {
+    logDebug('permission.asked event missing permission payload. Rejecting for safety.');
+    try {
+      await replyToTuiPermission(api, event, 'reject');
+    } catch (replyErr) {
+      logDebug(`permission.asked reply error: ${replyErr.message}`);
+    }
+    return;
+  }
+
+  const output = {};
+  try {
+    await permissionAskHook(permission, output);
+    const reply = output.status === 'allow' ? 'once' : 'reject';
+    await replyToTuiPermission(api, event, reply);
+    logDebug(`permission.asked auto-replied with: ${reply}`);
+  } catch (err) {
+    logDebug(`permission.asked evaluation error: ${err.message}. Rejecting for safety.`);
+    try {
+      await replyToTuiPermission(api, event, 'reject');
+    } catch (replyErr) {
+      logDebug(`permission.asked reply error: ${replyErr.message}`);
+    }
+  }
+}
+
+function registerPermissionAskedHandler(api) {
+  if (permissionAskedListeners.has(api.event)) return;
+  if (!canRegisterPermissionAsked(api)) {
+    logDebug('TUI permission.asked API unavailable. Skipping temporary permission adapter.');
+    return;
+  }
+
+  api.event.on('permission.asked', async (event) => {
+    try {
+      await handleTuiPermissionAsked(api, event);
+    } catch (handlerErr) {
+      logDebug(`permission.asked handler error: ${handlerErr.message}`);
+    }
+  });
+  permissionAskedListeners.set(api.event, true);
+  logDebug('Registered temporary TUI permission.asked adapter.');
+}
+
 // --------------------------------------------------------------------------
 // OpenCode Plugin Specification compliant export
 // --------------------------------------------------------------------------
 module.exports = {
   id: "@yohi/opencode-plugin-chronos-gate",
   "permission.ask": permissionAskHook,
+  tui: async (api) => {
+    logDebug("TUI plugin activation function called.");
+    if (api && api.client) {
+      globalClient = api.client;
+    }
+    registerPermissionAskedHandler(api);
+  },
   server: async (input, _options) => {
     logDebug("Plugin activation function (init) called.");
     if (input) {
       globalClient = input.client;
       globalDirectory = input.directory;
       globalInput = input;
+      registerPermissionAskedHandler(input);
     }
 
     try {
