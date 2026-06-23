@@ -1,27 +1,69 @@
-name: Release npm plugin
+name: Release
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - master
+
+permissions:
+  contents: write
+  pull-requests: write
+  packages: write
 
 jobs:
-  publish:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+  release:
+    runs-on: ubuntu-slim
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: googleapis/release-please-action@c3fc4de07084f75a2b61a5b933069bda6edf3d5c
+        id: release
         with:
-          persist-credentials: false
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          target-branch: master
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        if: ${{ steps.release.outputs.release_created }}
+        with:
+          ref: ${{ steps.release.outputs.tag_name }}
+
+      - uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f392ef373
+        if: ${{ steps.release.outputs.release_created }}
+        with:
+          python-version: '3.12'
+
+      - name: Build Python package
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          python -m pip install --upgrade pip build twine
+          python -m build
+
+      - name: Publish Python package to GitHub Packages
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: twine upload --repository-url https://pypi.pkg.github.com/${{ github.repository_owner }} dist/*
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        if: ${{ steps.release.outputs.release_created }}
         with:
           node-version: '26'
           registry-url: 'https://npm.pkg.github.com'
+          scope: '@${{ github.repository_owner }}'
 
-      - name: Publish to GitHub Packages
-        run: npm publish
+      - name: Publish npm package to GitHub Packages
+        if: ${{ steps.release.outputs.release_created }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm publish --ignore-scripts
+
+      - name: Package npm tarball
+        if: ${{ steps.release.outputs.release_created }}
+        run: npm pack --ignore-scripts
+
+      - name: Upload release assets
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload --clobber "${{ steps.release.outputs.tag_name }}" dist/* *.tgz
