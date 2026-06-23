@@ -40,7 +40,7 @@ jobs:
       - name: Publish Python package to GitHub Packages
         if: ${{ steps.release.outputs.release_created }}
         env:
-          TWINE_USERNAME: ${{ github.actor }}
+          TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         run: twine upload --repository-url https://pypi.pkg.github.com/${{ github.repository_owner }} dist/*
 
