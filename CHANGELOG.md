@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.1.1](https://github.com/yohi/chronos-gate/compare/v1.1.0...v1.1.1) (2026-06-28)
+
+
+### Documentation
+
+* AIエージェント向け自動セットアッププロトコルの作成と調整 ([5e883d1](https://github.com/yohi/chronos-gate/commit/5e883d1cd8a41126ab562eb08eaf2e6d57d7ce8e))
+* AIエージェント向け自動セットアッププロトコルの作成と調整 ([20b4dee](https://github.com/yohi/chronos-gate/commit/20b4deec338739c59918d39bb9f2293b820f14ff))
+* dry-runモード時における最終サマリー出力の競合を解消 ([80823b3](https://github.com/yohi/chronos-gate/commit/80823b333395c1f65bd3ef381119cdbb6069aa08))
+* エージェントセットアッププロトコルのブロッククォート警告解消と.envテンプレート更新 ([1821f9f](https://github.com/yohi/chronos-gate/commit/1821f9f315a0d16f73a55125b6bc44655e882a31))
+* 自動セットアッププロトコルの指摘事項（dry-run処理、APIキーのプレースホルダー化、実行モードの変数化）を修正 ([4df64fe](https://github.com/yohi/chronos-gate/commit/4df64fea80bcca2a665b9e62ae57c5db2fd1a4e8))
+
 ## [1.1.0](https://github.com/yohi/chronos-gate/compare/v1.0.0...v1.1.0) (2026-06-23)
 
 
