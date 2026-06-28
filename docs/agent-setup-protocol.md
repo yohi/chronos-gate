@@ -63,12 +63,13 @@
 
 ### Phase 3: 自動セットアップスクリプトの実行と .env 出力
 Phase 2 で確定したパラメータを引数に指定して、`scripts/bootstrap.sh` を実行します。
+**※注意:** `dry-run` モードの場合は、本番環境への書き出しやファイルの作成は行わず、実行予定のコマンドや作成されるファイルの想定内容を出力するのみに留めてください。
 
-#### デフォルト値と環境変数の出力先:
-セットアップの設定および環境変数ファイル（`.env`）は、デフォルトで **`$HOME/.chronos-gate/.env`** 配下に作成・設定されます。
+#### デフォルト値と環境変数の出力先 (production モードのみ):
+セットアップの設定および環境変数ファイル（`.env`）は、`production` モード時のみ、デフォルトで **`$HOME/.chronos-gate/.env`** 配下に作成・設定されます。
 
-#### LLM用のAPIキーの反映:
-`bootstrap.sh` 実行完了後、LLM評価が有効（`enabled`）の場合は、ユーザーから取得した LLM API キーを上記の `$HOME/.chronos-gate/.env` に安全に書き出します。
+#### LLM用のAPIキーの反映 (production モードのみ):
+`bootstrap.sh` 実行完了後、モードが `production` でかつLLM評価が有効（`enabled`）の場合は、ユーザーから取得した LLM API キーを上記の `$HOME/.chronos-gate/.env` に安全に書き出します。`dry-run` モードの場合は、ファイルへの書き出しは行わず、設定される予定の環境変数の内容を提示してください。
 
 #### 設定される想定環境変数 (`$HOME/.chronos-gate/.env`):
 ```dotenv
@@ -76,7 +77,7 @@ Phase 2 で確定したパラメータを引数に指定して、`scripts/bootst
 MCP_GATEWAY_PORT=9100
 
 # 2. プラグイン（送信側）およびゲートウェイ（受信側）の共通APIキー
-MCP_GATEWAY_API_KEY=opencode_secret_token
+MCP_GATEWAY_API_KEY=your_generated_or_custom_api_key_here
 
 # 3. LLM 評価器用の設定 (LLM評価を利用する場合に設定)
 # CHRONOS_EVALUATOR_API_KEY=your_llm_provider_api_key_here
@@ -85,9 +86,10 @@ MCP_GATEWAY_API_KEY=opencode_secret_token
 
 #### 実行コマンド例 (グローバルポリシー・リモート取得使用時):
 ```bash
+# <mode> には Phase 1 で確定した production または dry-run を指定する
 ./scripts/bootstrap.sh \
   --type evaluator \
-  --mode production \
+  --mode <mode> \
   --target gateway-server \
   --source remote \
   --policy-path ~/.chronos-gate/intents.yaml \
