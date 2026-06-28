@@ -6,7 +6,6 @@
 > **セットアップの実体は `scripts/bootstrap.sh` を介して機械的に行われます。AIエージェントが自ら設定ファイルをスクラッチから直接作成したり、設定スクリプトを手動で個別に書き込んだりすることは、設定のブレを防ぐために厳格に禁止されています。**
 > あなたの役割は、ユーザーに必要な設定事項を質問し、その回答を引数として `scripts/bootstrap.sh` に渡して実行することです。
 > **たとえ `.env` や設定ファイルが既に存在していても、それが本プロトコル（ask ツールによる明示的承認）を経て作成された正当なものであるか確証が持てない場合は、決してスキップせず、必ず Phase 1 から再開してください。**
-
 > [!IMPORTANT]
 > **🚨 ユーザー確認ツール（Askツール等）の使用強制 (STRICT ASK CONSTRAINT):**
 > あなた（AIエージェント）が各フェーズの **`BLOCKING STEP`** を実行する際は、**絶対にチャットテキスト上の対話だけで自己完結して進めてはいけません。**
@@ -76,12 +75,18 @@ Phase 2 で確定したパラメータを引数に指定して、`scripts/bootst
 # 1. ゲートウェイの起動ポート
 MCP_GATEWAY_PORT=9100
 
-# 2. プラグイン（送信側）およびゲートウェイ（受信側）の共通APIキー
-MCP_GATEWAY_API_KEY=your_generated_or_custom_api_key_here
+# 2. プラグイン（送信側）およびゲートウェイ（受信側）の共通APIキーとJSONマッピング
+# APIキーの命名は Phase 2 のポリシー配置場所 (global/custom) の挙動と整合させます
+MCP_GATEWAY_API_KEY=your_global_or_custom_api_key_here
+MCP_GATEWAY_API_KEYS_JSON={"global":"your_global_or_custom_api_key_here"}
 
-# 3. LLM 評価器用の設定 (LLM評価を利用する場合に設定)
-# CHRONOS_EVALUATOR_API_KEY=your_llm_provider_api_key_here
-# CHRONOS_EVALUATOR_MODEL=anthropic/claude-haiku-4-5-20251001
+# 3. ポリシーファイルの配置場所
+MCP_GATEWAY_POLICY_PATH=~/.chronos-gate/intents.yaml
+
+# 4. LLM 評価器用の設定 (LLM評価を利用する場合に設定)
+CHRONOS_EVALUATOR_POLICY_PATH=~/.chronos-gate/intents.yaml
+CHRONOS_EVALUATOR_API_KEY=your_llm_provider_api_key_here
+CHRONOS_EVALUATOR_MODEL=anthropic/claude-haiku-4-5-20251001
 ```
 
 #### 実行コマンド例 (グローバルポリシー・リモート取得使用時):
